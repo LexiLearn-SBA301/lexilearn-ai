@@ -4,3 +4,5 @@ pytest
 httpx
 pymongo
 python-dotenv
+langchain
+langchain-mongodb
