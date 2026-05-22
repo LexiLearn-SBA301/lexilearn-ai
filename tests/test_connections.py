@@ -8,6 +8,13 @@ import pytest
 from db.mongo_client import connect_to_mongo, close_mongo_connection
 from providers.ollama_provider import ollama_provider
 
+# Tự động bỏ qua tất cả test trong file này nếu chạy trên GitHub Actions (CI)
+pytestmark = pytest.mark.skipif(
+    os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("CI") == "true",
+    reason="Skipping local integration/connection tests on CI"
+)
+
+
 def test_mongodb_connection():
     """Kiểm tra kết nối tới MongoDB"""
     print("\n--- Testing MongoDB Connection ---")
