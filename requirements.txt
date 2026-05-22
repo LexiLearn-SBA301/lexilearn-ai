@@ -2,3 +2,8 @@ fastapi
 uvicorn
 pytest
 httpx
+pymongo
+python-dotenv
+langchain
+langchain-mongodb
+langchain-ollama
