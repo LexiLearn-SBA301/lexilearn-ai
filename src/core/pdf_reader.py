@@ -6,18 +6,15 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 try:
-    # pyrefly: ignore [missing-import]
     import pdfplumber
 except ImportError:
-    pdfplumber = None  # type: ignore
+    pdfplumber = None
 
 try:
-    # pyrefly: ignore [missing-import]
     import PyPDF2
 except ImportError:
-    PyPDF2 = None  # type: ignore
+    PyPDF2 = None
 
-# Set up logging
 logger = logging.getLogger("rag-service.pdf-reader")
 
 # TCVN3 (ABC) to Unicode mapping dictionary

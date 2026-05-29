@@ -2,13 +2,10 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-# Ensure src folder is in path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
-# pyrefly: ignore [missing-import]
 import pytest
-# pyrefly: ignore [missing-import]
-from core.pdf_reader import PDFReader, ExtractedElement
+from core.pdf_reader import PDFReader
 
 @pytest.fixture
 def reader():
