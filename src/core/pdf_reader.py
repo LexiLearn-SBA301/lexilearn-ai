@@ -17,33 +17,12 @@ except ImportError:
 
 logger = logging.getLogger("rag-service.pdf-reader")
 
-TCVN3_MAP = {
-    'µ': 'à', '¸': 'á', '¶': 'ả', '·': 'ã', '¹': 'ạ',
-    '¨': 'ă', '»': 'ằ', '¾': 'ắ', '¼': 'ẳ', '½': 'ẵ', 'Æ': 'ặ',
-    '©': 'â', 'Ç': 'ầ', 'Ê': 'ấ', 'È': 'ẩ', 'É': 'ẫ', 'Ë': 'ậ',
-    '®': 'đ',
-    'Ì': 'è', 'Ð': 'é', 'Î': 'ẻ', 'Ï': 'ẽ', 'Ñ': 'ẹ',
-    'ª': 'ê', 'Ò': 'ề', 'Õ': 'ế', 'Ó': 'ể', 'Ô': 'ễ', 'Ö': 'ệ',
-    '×': 'ì', 'Ý': 'í', 'Ø': 'ỉ', 'Ü': 'ĩ', 'Þ': 'ị',
-    'ß': 'ò', 'ã': 'ó', 'á': 'ỏ', 'â': 'õ', 'ä': 'ọ',
-    '«': 'ô', 'å': 'ồ', 'è': 'ố', 'æ': 'ổ', 'ç': 'ỗ', 'é': 'ộ',
-    '¬': 'ơ', 'ê': 'ờ', 'í': 'ớ', 'ë': 'ở', 'ì': 'ỡ', 'î': 'ợ',
-    'ó': 'ù', 'ñ': 'ú', 'ò': 'ủ', 'ô': 'ụ', 'õ': 'ũ',
-    'ø': 'ứ', 'ö': 'ừ', '÷': 'ử', 'ù': 'ự', 'ú': 'ữ', '−': 'ư',
-    'û': 'ỳ', 'ü': 'ý', 'þ': 'ỷ', '¡': 'ỹ', '¢': 'ỵ',
-    '§': 'Đ', '£': 'Ă', '¤': 'Â', '¥': 'Ê', '¦': 'Ô',
-    'μ': 'à',
-    'µ': 'à',
-    '': '-',
-}
+import vietnamese
 
-TCVN3_SIGNATURE_CHARS = "µ¸¶·¹¨»¾¼½Æ©ÇÊÈÉË®ÌÐÎÏÑªÒÕÓÔÖ×ÝØÜÞ§£¤¥¦−μ"
+TCVN3_SIGNATURE_CHARS = "\u00b5\u00b8\u00b6\u00b7\u00b9\u00a8\u00bb\u00be\u00bc\u00bd\u00c6\u00a9\u00c7\u00cb\u00ae\u00d0\u00ce\u00cf\u00d1\u00aa\u00d6\u00d7\u00d8\u00dc\u00de\u00a7\u00a3\u00a4\u00a5\u00a6\u2212\u03bc\uf02d"
 
 @dataclass
 class ExtractedElement:
-    """
-    Represents a structured element extracted from a PDF document page.
-    """
     page: int
     type: str
     raw_text: str
@@ -100,14 +79,19 @@ class PDFReader:
         elements: List[ExtractedElement] = []
 
         with pdfplumber.open(file_path) as pdf:
-            for page_idx, page in enumerate(pdf.pages):
+            for page_idx, page in enumerate(pdf.pages): #Cơ chế: Đọc từng phong bì được lấy từ pdf.pages và dán nhãn cho phong bì đó - trang đầu sẽ là 0 nên là 0 + 1
                 page_num = page_idx + 1
                 try:
+                    # Detect page-level TCVN3 encoding
+                    page_raw_text = page.extract_text() or ""
+                    page_sig_count = sum(1 for c in page_raw_text if c in TCVN3_SIGNATURE_CHARS)
+                    self.current_page_is_tcvn3 = page_sig_count >= 5
+
                     tables = page.find_tables()
                     table_elements: List[ExtractedElement] = []
                     
                     for table in tables:
-                        table_data = table.extract()
+                        table_data = table.extract()#Dữ liệu của bảng và trả ra theo dạng list - list chứa các hàng - mỗi hàng là 1 list
                         if not table_data:
                             continue
                         
@@ -135,20 +119,22 @@ class PDFReader:
                                     obj.get("object_type") == "char"
                                     and any(self._is_in_bbox(obj, t.bbox) for t in tables)
                                 )
-                            )
+                            ) #Lọc ra các dữ liệu không có trong bảng cùng trong 1 trang pdf -> tránh lặp dữ liệu
                             page_text = filtered_page.extract_text()
                         except Exception as filter_err:
                             logger.warning(
                                 f"Failed to filter table characters on page {page_num} "
                                 f"of {source_file}: {filter_err}. Proceeding with standard text extraction."
                             )
-                            page_text = page.extract_text()
+                            page_text = page.extract_text() #Lấy tất cả dữ liệu trong trang kể cả bảng luôn nhưng mà ta đã lọc ở trên rồi nên là nó sẽ lấy từ trang đã được lọc
                     else:
-                        page_text = page.extract_text()
+                        page_text = page.extract_text() #Không có bảng thì lấy tất cả dữ liệu trong trang
 
                     parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
                     elements.extend(parsed_elements)
                     elements.extend(table_elements)
+                    #Nếu dùng append -> [[Đoạn_văn_1, Đoạn_văn_2], Bảng_1] -> danh sách bị lồng nhau, 
+                    # còn dùng extend -> [Đoạn_văn_1, Đoạn_văn_2, Bảng_1] -> danh sách phẳng
 
                 except Exception as page_err:
                     logger.warning(
@@ -174,6 +160,11 @@ class PDFReader:
                 page_num = page_idx + 1
                 try:
                     page_text = page.extract_text()
+                    # Detect page-level TCVN3 encoding
+                    page_raw_text = page_text or ""
+                    page_sig_count = sum(1 for c in page_raw_text if c in TCVN3_SIGNATURE_CHARS)
+                    self.current_page_is_tcvn3 = page_sig_count >= 5
+
                     parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
                     elements.extend(parsed_elements)
                 except Exception as page_err:
@@ -256,7 +247,7 @@ class PDFReader:
             source_file=source_file
         )
 
-    def _tcvn3_to_unicode(self, text: str) -> str:
+    def _tcvn3_to_unicode(self, text: str, force: bool = False) -> str:
         """
         Dynamically detects if a text is TCVN3-encoded and decodes it to Unicode.
         """
@@ -264,8 +255,14 @@ class PDFReader:
             return ""
         tcvn3_sig_count = sum(1 for c in text if c in TCVN3_SIGNATURE_CHARS)
         
-        if tcvn3_sig_count >= 2 or (tcvn3_sig_count >= 1 and len(text) < 30):
-            return "".join(TCVN3_MAP.get(c, c) for c in text)
+        # If the page is TCVN3-encoded, any element with at least 1 signature character is TCVN3.
+        # Otherwise, we use the standard threshold of 2 (or 1 for short texts).
+        threshold = 1 if force else 2
+        
+        if tcvn3_sig_count >= threshold or (not force and tcvn3_sig_count >= 1 and len(text) < 30):
+            # Pre-process PDF extraction hyphen artifacts before converting
+            processed_text = text.replace("−", "\u00ad").replace("", "-").replace("\u03bc", "\u00b5")
+            return vietnamese.normalize(processed_text, target_charset="UNICODE", source_charset="TCVN3")
         return text
 
     def _clean_text(self, text: str) -> str:
@@ -274,7 +271,8 @@ class PDFReader:
         """
         if not text:
             return ""
-        text = self._tcvn3_to_unicode(text)
+        force_tcvn3 = getattr(self, "current_page_is_tcvn3", False)
+        text = self._tcvn3_to_unicode(text, force=force_tcvn3)
         normalized = unicodedata.normalize("NFC", text)
         collapsed_spaces = re.sub(r'[ \t\r\f\v]+', ' ', normalized)
         return collapsed_spaces.strip()

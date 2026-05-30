@@ -9,4 +9,5 @@ langchain-mongodb
 langchain-ollama
 pdfplumber
 PyPDF2
-
+vietnamese
+underthesea

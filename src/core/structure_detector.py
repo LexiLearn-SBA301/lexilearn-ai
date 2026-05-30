@@ -1,0 +1,132 @@
+import re
+import logging
+from dataclasses import dataclass
+from typing import List, Optional
+from core.pdf_reader import ExtractedElement
+
+logger = logging.getLogger("rag-service.structure-detector")
+
+
+@dataclass
+class DocumentSection:
+    """
+    Represents a hierarchical section within the document.
+    """
+    title: str
+    level: int
+    page_start: int
+    page_end: int
+    content: List[str]
+    parent_title: Optional[str]
+
+
+class StructureDetector:
+    """
+    Detects document hierarchy, titles, sections, and subsections
+    from a flat list of ExtractedElements.
+    """
+
+    def __init__(self) -> None:
+        self.roman_pattern = re.compile(r"^[IVXLCDM]+\.?\s+")
+        self.numbered_pattern = re.compile(r"^\d+(\.\d+)*\.?\s+")
+        self.letter_pattern = re.compile(r"^[a-z][\)\.]\s+")
+
+    def _is_roman_heading(self, text: str) -> bool:
+        return bool(self.roman_pattern.match(text))
+
+    def _is_numbered_heading(self, text: str) -> bool:
+        return bool(self.numbered_pattern.match(text))
+
+    def _is_letter_heading(self, text: str) -> bool:
+        return bool(self.letter_pattern.match(text))
+
+    def _is_main_title(self, text: str) -> bool:
+        text = text.strip()
+        if not text:
+            return False
+        if (
+            len(text) <= 80
+            and text.isupper()
+            and any(c.isalpha() for c in text)
+            and not (
+                self._is_roman_heading(text)
+                or self._is_numbered_heading(text)
+                or self._is_letter_heading(text)
+            )
+        ):
+            return True
+        return False
+
+    def _classify_heading_level(self, text: str) -> int:
+        text_stripped = text.strip()
+        if self._is_roman_heading(text_stripped):
+            return 1
+        elif self._is_letter_heading(text_stripped):
+            return 3
+        elif self._is_numbered_heading(text_stripped):
+            return 2
+        elif self._is_main_title(text_stripped):
+            return 0
+        else:
+            logger.warning(f"Unclassifiable heading: '{text}'. Defaulting to Level 1.")
+            return 1
+
+    def detect(self, elements: List[ExtractedElement]) -> List[DocumentSection]:
+        """
+        Converts flat ExtractedElements into hierarchical DocumentSections.
+        """
+        if not elements:
+            return []
+
+        sections: List[DocumentSection] = []
+        section_stack: List[DocumentSection] = []
+
+        for element in elements:
+            if not element.raw_text or not element.raw_text.strip():
+                logger.debug(f"Skipping element without raw_text on page {element.page}")
+                continue
+
+            text = element.raw_text.strip()
+
+            if element.type == "heading":
+                level = self._classify_heading_level(text)
+
+                parent_title: Optional[str] = None
+                for section in reversed(section_stack):
+                    if section.level < level:
+                        parent_title = section.title
+                        break
+
+                new_section = DocumentSection(
+                    title=text,
+                    level=level,
+                    page_start=element.page,
+                    page_end=element.page,
+                    content=[],
+                    parent_title=parent_title
+                )
+
+                while section_stack and section_stack[-1].level >= level:
+                    section_stack.pop()
+
+                section_stack.append(new_section)
+                sections.append(new_section)
+
+            else:
+                if not sections:
+                    default_section = DocumentSection(
+                        title="Untitled",
+                        level=0,
+                        page_start=element.page,
+                        page_end=element.page,
+                        content=[],
+                        parent_title=None
+                    )
+                    sections.append(default_section)
+                    section_stack.append(default_section)
+
+                active_section = sections[-1]
+                active_section.content.append(text)
+                active_section.page_end = max(active_section.page_end, element.page)
+
+        return sections
