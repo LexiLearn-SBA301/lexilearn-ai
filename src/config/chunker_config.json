@@ -1,12 +1,4 @@
 {
-  "known_characters": [
-    "Tràng", "Mị", "Chí Phèo", "A Phủ", "Huấn Cao", "Tnú", "cụ Mết", "Mai", "Dít", "Hộ", "Từ",
-    "Liên", "An", "Sơn Tinh", "Thủy Tinh", "Mị Châu", "Trọng Thủy", "Vũ Nương", "Trương Sinh",
-    "Ngô Tử Văn", "Kiều", "Kim Trọng", "Từ Hải", "Thúc Sinh", "Hoạn Thư", "Tấm", "Cám"
-  ],
-  "excluded_characters": [
-    "Việt Nam", "Hà Nội", "Kim Lân", "Nam Cao", "Tô Hoài", "Nguyễn Tuân", "Nguyễn Minh Châu"
-  ],
   "tag_patterns": {
     "nhan_vat": ["nhân vật", "nhân vật chính", "hình tượng nhân vật"],
     "tam_ly_nhan_vat": ["tâm lý", "nội tâm", "tâm trạng", "diễn biến tâm lý"],
@@ -20,6 +12,21 @@
     "tac_gia": ["tác giả", "tiểu sử", "cuộc đời"],
     "tac_pham": ["tác phẩm", "nhan đề", "xuất xứ"]
   },
+  "known_characters": [
+    "Tràng", "Mị", "Chí Phèo", "A Phủ", "Huấn Cao", "Tnú", "cụ Mết", "Mai", "Dít", "Hộ", "Từ",
+    "Liên", "An", "Sơn Tinh", "Thủy Tinh", "Mị Châu", "Trọng Thủy", "Vũ Nương", "Trương Sinh",
+    "Ngô Tử Văn", "Kiều", "Kim Trọng", "Từ Hải", "Thúc Sinh", "Hoạn Thư", "Tấm", "Cám"
+  ],
+  "excluded_characters": [
+    "việt nam", "hà nội", "kim lân", "nam cao", "tô hoài", "nguyễn tuân", 
+    "nguyễn minh châu", "nguyễn du", "nguyễn đình chiểu", "tây tiến", 
+    "việt bắc", "sông đà", "đất nước", "sóng", "hồn trương ba", 
+    "truyện kiều", "lục vân tiên", "chí phèo", "lão hạc", "tắt đèn", 
+    "dế mèn phiêu lưu ký", "nhà xuất bản", "giáo dục", "bộ giáo dục",
+    "tác giả", "tác phẩm", "nhân vật", "hình tượng", "nhà văn", "nhà thơ",
+    "tôi", "ta", "chúng ta", "chúng tôi", "anh", "chị", "ông", "bà",
+    "họ", "nó", "chúng", "người", "nhân dân", "đồng bào"
+  ],
   "evidence_prefixes": [
     "chẳng hạn", "ví dụ", "như trong", "như ta đã", "minh chứng"
   ],

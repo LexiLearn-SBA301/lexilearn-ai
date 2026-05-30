@@ -51,13 +51,14 @@ class SemanticChunker:
         logger.info(f"Loaded semantic chunker configuration from {config_path}")
 
         # Assign lists and patterns directly from config
+        self.tag_patterns = self.config["tag_patterns"]
         self.known_characters = self.config["known_characters"]
         self.excluded_characters = self.config["excluded_characters"]
-        self.tag_patterns = self.config["tag_patterns"]
         self.evidence_prefixes = self.config["evidence_prefixes"]
         self.split_markers = self.config["split_markers"]
         self.split_topics = self.config["split_topics"]
         self.analysis_keywords = self.config["analysis_keywords"]
+        self._character_cache = {}
 
     def _slugify(self, text: str) -> str:
         """
@@ -82,21 +83,40 @@ class SemanticChunker:
 
     def _estimate_token_count(self, text: str) -> int:
         """
-        Estimates the token count of a text using simple space-splitting.
+        Estimates the token count of a text using underthesea word tokenization.
         """
         if not text:
             return 0
-        return len(text.split())
+        try:
+            from underthesea import word_tokenize
+            return len(word_tokenize(text))
+        except Exception as e:
+            logger.warning(f"Underthesea word_tokenize failed: {e}. Falling back to space split.")
+            return len(text.split())
 
     def _get_characters(self, text: str) -> Set[str]:
         """
-        Extracts names of characters from the text.
+        Extracts names of characters from the text using a hybrid approach of
+        known list lookup, syntactic heuristics, and Underthesea NER models.
+        Uses a local cache to avoid redundant expensive NER model calls.
         """
+        if not text:
+            return set()
+
+        if not hasattr(self, "_character_cache"):
+            self._character_cache = {}
+
+        if text in self._character_cache:
+            return self._character_cache[text]
+
         chars = set()
+
+        # 1. Matches from the known_characters list
         for char in self.known_characters:
             if re.search(rf"\b{re.escape(char)}\b", text):
                 chars.add(char)
-                
+
+        # 2. Extract using syntactic heuristics (e.g., 'nhân vật Mị')
         char_after_phrases = [
             r"nhân vật\s+([A-ZĐ][a-zA-Zàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\s]+)",
             r"hình tượng\s+([A-ZĐ][a-zA-Zàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\s]+)"
@@ -112,9 +132,42 @@ class SemanticChunker:
                         break
                 if name_words:
                     char_name = " ".join(name_words)
-                    if char_name not in self.excluded_characters:
+                    if char_name.lower() not in self.excluded_characters:
                         chars.add(char_name)
-        return chars
+
+        # 3. Dynamic Named Entity Recognition (NER) via Underthesea
+        try:
+            from underthesea import ner
+            entities = ner(text)
+            current_name = []
+            for word, pos, chunk, ent in entities:
+                if ent == "B-PER":
+                    if current_name:
+                        chars.add(" ".join(current_name).replace("_", " "))
+                    current_name = [word]
+                elif ent == "I-PER":
+                    current_name.append(word)
+                else:
+                    if current_name:
+                        chars.add(" ".join(current_name).replace("_", " "))
+                        current_name = []
+            if current_name:
+                chars.add(" ".join(current_name).replace("_", " "))
+        except Exception as e:
+            logger.warning(f"Underthesea NER failed: {e}. Falling back to heuristics.")
+
+        # Clean, filter, and normalize names
+        cleaned_chars = set()
+        for name in chars:
+            cleaned_name = name.replace("_", " ").strip()
+            # Must contain letters, start with uppercase, and not be in excluded list
+            if cleaned_name and cleaned_name.lower() not in self.excluded_characters:
+                words = cleaned_name.split()
+                if all(w[0].isupper() or w[0] == 'Đ' or (len(w) > 1 and w[0] == '(') for w in words if w):
+                    cleaned_chars.add(cleaned_name)
+
+        self._character_cache[text] = cleaned_chars
+        return cleaned_chars
 
     def _should_split(self, current_paragraphs: List[str], next_paragraph: str) -> bool:
         """
@@ -145,7 +198,11 @@ class SemanticChunker:
         if last_paragraph.startswith(("-", "–", "—")) and next_stripped.startswith(("-", "–", "—")):
             return False
             
-        current_chars = self._get_characters(current_text)
+        # Optimize by getting characters of current paragraphs individually to leverage caching
+        current_chars = set()
+        for p in current_paragraphs:
+            current_chars.update(self._get_characters(p))
+            
         next_chars = self._get_characters(next_paragraph)
         if current_chars and next_chars and not next_chars.issubset(current_chars):
             return True
@@ -218,38 +275,19 @@ class SemanticChunker:
         """
         tags = set()
         title_content = f"{title}\n\n{content}".lower()
-        
+
         for tag, keywords in self.tag_patterns.items():
             for kw in keywords:
                 if kw in title_content:
                     tags.add(tag)
                     break
-                    
-        for char in self.known_characters:
-            pattern = rf"\b{re.escape(char)}\b"
-            if re.search(pattern, title) or re.search(pattern, content):
-                tags.add(f"nhan_vat_{self._slugify(char)}")
-                tags.add("nhan_vat")
-                
-        char_after_phrases = [
-            r"nhân vật\s+([A-ZĐ][a-zA-Zàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\s]+)",
-            r"hình tượng\s+([A-ZĐ][a-zA-Zàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ\s]+)"
-        ]
-        for pattern in char_after_phrases:
-            for match in re.finditer(pattern, f"{title}\n\n{content}"):
-                raw_name = match.group(1).strip()
-                name_words = []
-                for w in raw_name.split():
-                    if w and (w[0].isupper() or w[0] == 'Đ'):
-                        name_words.append(w)
-                    else:
-                        break
-                if name_words:
-                    char_name = " ".join(name_words)
-                    if char_name not in self.excluded_characters:
-                        tags.add(f"nhan_vat_{self._slugify(char_name)}")
-                        tags.add("nhan_vat")
-                        
+
+        # Extract characters using our updated _get_characters method which uses underthesea NER
+        detected_chars = self._get_characters(f"{title}\n\n{content}")
+        for char in detected_chars:
+            tags.add(f"nhan_vat_{self._slugify(char)}")
+            tags.add("nhan_vat")
+
         return sorted(list(tags))
 
     def _generate_overlap(self, prev_chunk: SemanticChunk) -> str:

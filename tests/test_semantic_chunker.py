@@ -4,6 +4,57 @@ import pytest
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
+import sys
+from unittest.mock import MagicMock
+
+def mock_word_tokenize(text):
+    if not text:
+        return []
+    return text.split()
+
+def mock_ner(text):
+    if not text:
+        return []
+    words = text.split()
+    results = []
+    i = 0
+    while i < len(words):
+        word = words[i].strip(".,!?;:()\"”'“-")
+        if not word:
+            results.append((words[i], "CH", "O", "O"))
+            i += 1
+            continue
+        
+        # Check for multi-word names first
+        if word == "A" and i + 1 < len(words) and words[i+1].strip(".,!?;:()\"”'“-") == "Phủ":
+            results.append((word, "Np", "B-NP", "B-PER"))
+            results.append((words[i+1].strip(".,!?;:()\"”'“-"), "Np", "I-NP", "I-PER"))
+            i += 2
+            continue
+        if word == "Kim" and i + 1 < len(words) and words[i+1].strip(".,!?;:()\"”'“-") == "Lân":
+            results.append((word, "Np", "B-NP", "B-PER"))
+            results.append((words[i+1].strip(".,!?;:()\"”'“-"), "Np", "I-NP", "I-PER"))
+            i += 2
+            continue
+        if word == "Tô" and i + 1 < len(words) and words[i+1].strip(".,!?;:()\"”'“-") == "Hoài":
+            results.append((word, "Np", "B-NP", "B-PER"))
+            results.append((words[i+1].strip(".,!?;:()\"”'“-"), "Np", "I-NP", "I-PER"))
+            i += 2
+            continue
+            
+        # Single word names
+        if word in ("Tràng", "Mị"):
+            results.append((word, "Np", "B-NP", "B-PER"))
+        else:
+            results.append((word, "N", "B-NP", "O"))
+        i += 1
+    return results
+
+underthesea_mock = MagicMock()
+underthesea_mock.word_tokenize = mock_word_tokenize
+underthesea_mock.ner = mock_ner
+sys.modules['underthesea'] = underthesea_mock
+
 from core.structure_detector import DocumentSection
 from core.semantic_chunker import SemanticChunker, SemanticChunk
 
