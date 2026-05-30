@@ -1,0 +1,37 @@
+{
+  "known_characters": [
+    "Tràng", "Mị", "Chí Phèo", "A Phủ", "Huấn Cao", "Tnú", "cụ Mết", "Mai", "Dít", "Hộ", "Từ",
+    "Liên", "An", "Sơn Tinh", "Thủy Tinh", "Mị Châu", "Trọng Thủy", "Vũ Nương", "Trương Sinh",
+    "Ngô Tử Văn", "Kiều", "Kim Trọng", "Từ Hải", "Thúc Sinh", "Hoạn Thư", "Tấm", "Cám"
+  ],
+  "excluded_characters": [
+    "Việt Nam", "Hà Nội", "Kim Lân", "Nam Cao", "Tô Hoài", "Nguyễn Tuân", "Nguyễn Minh Châu"
+  ],
+  "tag_patterns": {
+    "nhan_vat": ["nhân vật", "nhân vật chính", "hình tượng nhân vật"],
+    "tam_ly_nhan_vat": ["tâm lý", "nội tâm", "tâm trạng", "diễn biến tâm lý"],
+    "gia_tri_hien_thuc": ["giá trị hiện thực", "hiện thực"],
+    "gia_tri_nhan_dao": ["giá trị nhân đạo", "nhân đạo"],
+    "nghe_thuat": ["nghệ thuật", "nghe thuật", "bút pháp", "thủ pháp"],
+    "phong_cach_sang_tac": ["phong cách", "phong cách sáng tác"],
+    "hinh_tuong_thien_nhien": ["thiên nhiên", "hình tượng thiên nhiên", "phong cảnh"],
+    "boi_canh": ["bối cảnh", "hoàn cảnh", "không gian", "thời gian"],
+    "de_tai": ["đề tài", "chủ đề"],
+    "tac_gia": ["tác giả", "tiểu sử", "cuộc đời"],
+    "tac_pham": ["tác phẩm", "nhan đề", "xuất xứ"]
+  },
+  "evidence_prefixes": [
+    "chẳng hạn", "ví dụ", "như trong", "như ta đã", "minh chứng"
+  ],
+  "split_markers": [
+    "thứ nhất", "thứ hai", "thứ ba", "thứ tư", "một là", "hai là", "ba là",
+    "về mặt", "ngoài ra", "bên cạnh đó", "trước hết", "sau cùng", "tóm lại",
+    "đặc biệt là", "hơn nữa"
+  ],
+  "split_topics": [
+    "giá trị hiện thực", "giá trị nhân đạo", "nghệ thuật", "phong cách"
+  ],
+  "analysis_keywords": [
+    "phân tích", "giá trị", "nghệ thuật", "đặc sắc"
+  ]
+}

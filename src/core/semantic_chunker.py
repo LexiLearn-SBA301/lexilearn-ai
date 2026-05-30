@@ -34,6 +34,31 @@ class SemanticChunker:
     Chunks DocumentSections into SemanticChunks optimized for retrieval.
     """
 
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initializes the SemanticChunker, loading configuration from config_path or a default location.
+        """
+        import os
+        import json
+
+        # Load configuration
+        if not config_path:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "chunker_config.json"))
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            self.config = json.load(f)
+        logger.info(f"Loaded semantic chunker configuration from {config_path}")
+
+        # Assign lists and patterns directly from config
+        self.known_characters = self.config["known_characters"]
+        self.excluded_characters = self.config["excluded_characters"]
+        self.tag_patterns = self.config["tag_patterns"]
+        self.evidence_prefixes = self.config["evidence_prefixes"]
+        self.split_markers = self.config["split_markers"]
+        self.split_topics = self.config["split_topics"]
+        self.analysis_keywords = self.config["analysis_keywords"]
+
     def _slugify(self, text: str) -> str:
         """
         Converts Vietnamese text to a clean ASCII-safe slug.
@@ -68,12 +93,7 @@ class SemanticChunker:
         Extracts names of characters from the text.
         """
         chars = set()
-        known_characters = [
-            "Tràng", "Mị", "Chí Phèo", "A Phủ", "Huấn Cao", "Tnú", "cụ Mết", "Mai", "Dít", "Hộ", "Từ",
-            "Liên", "An", "Sơn Tinh", "Thủy Tinh", "Mị Châu", "Trọng Thủy", "Vũ Nương", "Trương Sinh",
-            "Ngô Tử Văn", "Kiều", "Kim Trọng", "Từ Hải", "Thúc Sinh", "Hoạn Thư", "Tấm", "Cám"
-        ]
-        for char in known_characters:
+        for char in self.known_characters:
             if re.search(rf"\b{re.escape(char)}\b", text):
                 chars.add(char)
                 
@@ -92,7 +112,7 @@ class SemanticChunker:
                         break
                 if name_words:
                     char_name = " ".join(name_words)
-                    if char_name not in ["Việt Nam", "Hà Nội", "Kim Lân", "Nam Cao", "Tô Hoài", "Nguyễn Tuân", "Nguyễn Minh Châu"]:
+                    if char_name not in self.excluded_characters:
                         chars.add(char_name)
         return chars
 
@@ -116,8 +136,7 @@ class SemanticChunker:
                 
         next_stripped = next_paragraph.strip()
         next_lower = next_stripped.lower()
-        evidence_prefixes = ["chẳng hạn", "ví dụ", "như trong", "như ta đã", "minh chứng"]
-        if any(next_lower.startswith(prefix) for prefix in evidence_prefixes):
+        if any(next_lower.startswith(prefix) for prefix in self.evidence_prefixes):
             return False
             
         if len(last_paragraph) < 50 and len(next_stripped) < 50:
@@ -131,22 +150,16 @@ class SemanticChunker:
         if current_chars and next_chars and not next_chars.issubset(current_chars):
             return True
             
-        markers = [
-            "thứ nhất", "thứ hai", "thứ ba", "thứ tư", "một là", "hai là", "ba là",
-            "về mặt", "ngoài ra", "bên cạnh đó", "trước hết", "sau cùng", "tóm lại",
-            "đặc biệt là", "hơn nữa"
-        ]
-        if any(next_lower.startswith(m) for m in markers):
+        if any(next_lower.startswith(m) for m in self.split_markers):
             return True
             
-        topics = ["giá trị hiện thực", "giá trị nhân đạo", "nghệ thuật", "phong cách"]
         current_topic = None
-        for t in topics:
+        for t in self.split_topics:
             if t in current_text.lower():
                 current_topic = t
                 break
         next_topic = None
-        for t in topics:
+        for t in self.split_topics:
             if t in next_lower:
                 next_topic = t
                 break
@@ -192,8 +205,7 @@ class SemanticChunker:
         if re.search(dialogue_pattern, content, re.IGNORECASE):
             return "dialogue"
             
-        analysis_keywords = ["phân tích", "giá trị", "nghệ thuật", "đặc sắc"]
-        if any(kw in title_lower for kw in analysis_keywords):
+        if any(kw in title_lower for kw in self.analysis_keywords):
             return "analysis"
         if re.search(r'(phân tích|giá trị nghệ thuật|giá trị hiện thực|giá trị nhân đạo|nét đặc sắc)', content, re.IGNORECASE):
             return "analysis"
@@ -207,33 +219,13 @@ class SemanticChunker:
         tags = set()
         title_content = f"{title}\n\n{content}".lower()
         
-        tag_patterns = {
-            "nhan_vat": ["nhân vật", "nhân vật chính", "hình tượng nhân vật"],
-            "tam_ly_nhan_vat": ["tâm lý", "nội tâm", "tâm trạng", "diễn biến tâm lý"],
-            "gia_tri_hien_thuc": ["giá trị hiện thực", "hiện thực"],
-            "gia_tri_nhan_dao": ["giá trị nhân đạo", "nhân đạo"],
-            "nghe_thuat": ["nghệ thuật", "bút pháp", "thủ pháp"],
-            "phong_cach_sang_tac": ["phong cách", "phong cách sáng tác"],
-            "hinh_tuong_thien_nhien": ["thiên nhiên", "hình tượng thiên nhiên", "phong cảnh"],
-            "boi_canh": ["bối cảnh", "hoàn cảnh", "không gian", "thời gian"],
-            "de_tai": ["đề tài", "chủ đề"],
-            "tac_gia": ["tác giả", "tiểu sử", "cuộc đời"],
-            "tac_pham": ["tác phẩm", "nhan đề", "xuất xứ"],
-        }
-        
-        for tag, keywords in tag_patterns.items():
+        for tag, keywords in self.tag_patterns.items():
             for kw in keywords:
                 if kw in title_content:
                     tags.add(tag)
                     break
                     
-        known_characters = [
-            "Tràng", "Mị", "Chí Phèo", "A Phủ", "Huấn Cao", "Tnú", "cụ Mết", "Mai", "Dít", "Hộ", "Từ",
-            "Liên", "An", "Sơn Tinh", "Thủy Tinh", "Mị Châu", "Trọng Thủy", "Vũ Nương", "Trương Sinh",
-            "Ngô Tử Văn", "Kiều", "Kim Trọng", "Từ Hải", "Thúc Sinh", "Hoạn Thư", "Tấm", "Cám"
-        ]
-        
-        for char in known_characters:
+        for char in self.known_characters:
             pattern = rf"\b{re.escape(char)}\b"
             if re.search(pattern, title) or re.search(pattern, content):
                 tags.add(f"nhan_vat_{self._slugify(char)}")
@@ -254,7 +246,7 @@ class SemanticChunker:
                         break
                 if name_words:
                     char_name = " ".join(name_words)
-                    if char_name not in ["Việt Nam", "Hà Nội", "Kim Lân", "Nam Cao", "Tô Hoài", "Nguyễn Tuân", "Nguyễn Minh Châu"]:
+                    if char_name not in self.excluded_characters:
                         tags.add(f"nhan_vat_{self._slugify(char_name)}")
                         tags.add("nhan_vat")
                         
