@@ -1,0 +1,20 @@
+{
+  "max_query_length": 1000,
+  "max_special_char_ratio": 0.15,
+  "block_code_blocks": true,
+  "jailbreak_patterns": [
+    "ignore\\s+previous\\s+instructions",
+    "ignore\\s+system\\s+instructions",
+    "forget\\s+all\\s+instructions",
+    "you\\s+are\\s+now",
+    "act\\s+as\\s+a",
+    "system\\s+prompt",
+    "bỏ\\s+qua\\s+chỉ\\s+thị",
+    "bỏ\\s+qua\\s+hướng\\s+dẫn",
+    "quên\\s+đi\\s+các\\s+chỉ\\s+thị",
+    "đóng\\s+vai",
+    "trở\\s+thành\\s+một",
+    "lệnh\\s+hệ\\s+thống",
+    "bạn\\s+là\\s+một"
+  ]
+}

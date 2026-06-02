@@ -11,6 +11,7 @@ from core.mongo_writer import MongoWriter
 from retrievals.rrf import reciprocal_rank_fusion
 from providers.ollama_provider import ollama_provider
 from config.prompt_template import SYSTEM_PROMPT
+from security.injection_guard import InjectionGuard
 
 logger = logging.getLogger("rag-service.services.rag-service")
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +46,7 @@ class RAGService:
         self.db = self.writer.db
         self.collection = self.writer.collection
         self.embedder = Embedder()
+        self.guard = InjectionGuard()
         logger.info(f"RAGService initialized successfully with database '{target_db}'.")
 
     def _vector_search(self, query_vector: List[float], db_filter: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
@@ -197,6 +199,14 @@ class RAGService:
         """
         Answer a RAG query by retrieving contexts and calling Ollama LLM to synthesize the final answer.
         """
+        # Guard against prompt injection
+        guard_res = self.guard.check_query(query)
+        if not guard_res["safe"]:
+            return {
+                "answer": f"Cảnh báo bảo mật: Truy vấn bị từ chối. Lý do: {guard_res['reason']}",
+                "sources": []
+            }
+
         # Retrieve context documents
         chunks = self.hybrid_search(query, filters=filters, limit=limit)
 
