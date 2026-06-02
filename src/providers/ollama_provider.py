@@ -10,7 +10,7 @@ load_dotenv()
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
-OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "gemma4:e4b")
+OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:3b")
 
 class OllamaProvider:
     def __init__(self):

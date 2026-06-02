@@ -11,3 +11,7 @@ pdfplumber
 PyPDF2
 vietnamese
 underthesea
+sentence-transformers
+langchain-huggingface
+torch
+numpy

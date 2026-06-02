@@ -25,7 +25,7 @@ def mock_ner(text):
             i += 1
             continue
         
-        # Check for multi-word names first
+        
         if word == "A" and i + 1 < len(words) and words[i+1].strip(".,!?;:()\"”'“-") == "Phủ":
             results.append((word, "Np", "B-NP", "B-PER"))
             results.append((words[i+1].strip(".,!?;:()\"”'“-"), "Np", "I-NP", "I-PER"))
@@ -42,7 +42,7 @@ def mock_ner(text):
             i += 2
             continue
             
-        # Single word names
+        
         if word in ("Tràng", "Mị"):
             results.append((word, "Np", "B-NP", "B-PER"))
         else:
@@ -103,19 +103,19 @@ def test_content_type_detection(chunker):
     """
     Test detection of different content types: prose, poem, dialogue, exercise, table, analysis, summary, list.
     """
-    # 1. Exercise (based on title)
+    
     c1 = chunker._detect_content_type("Luyện tập bài học", "Câu 1. Phân tích...")
     assert c1 == "exercise"
     
-    # 2. Summary (based on title)
+    
     c2 = chunker._detect_content_type("Ghi nhớ cuối bài", "Tóm tắt các giá trị...")
     assert c2 == "summary"
     
-    # 3. Table
+    
     c3 = chunker._detect_content_type("Bảng so sánh", "Cột A | Cột B | Cột C\nGiá trị | Nghệ thuật | Ý nghĩa")
     assert c3 == "table"
     
-    # 4. Poem (multiple short lines)
+    
     poem_content = (
         "Sông Mã xa rồi Tây Tiến ơi\n"
         "Nhớ về rừng núi nhớ chơi vơi\n"
@@ -125,7 +125,7 @@ def test_content_type_detection(chunker):
     c4 = chunker._detect_content_type("Tây Tiến", poem_content)
     assert c4 == "poem"
     
-    # 5. Dialogue
+    
     dialogue_content = (
         "– Con đói quá u ơi!\n"
         "– Thôi nín đi con, u đi kiếm cái ăn cho."
@@ -133,7 +133,7 @@ def test_content_type_detection(chunker):
     c5 = chunker._detect_content_type("Trò chuyện", dialogue_content)
     assert c5 == "dialogue"
     
-    # 6. List
+    
     list_content = (
         "- Giá trị hiện thực độc đáo\n"
         "- Giá trị nhân đạo sâu sắc\n"
@@ -142,12 +142,12 @@ def test_content_type_detection(chunker):
     c6 = chunker._detect_content_type("Đánh giá", list_content)
     assert c6 == "list"
     
-    # 7. Analysis (based on keywords)
+    
     analysis_content = "Đoạn văn này phân tích giá trị nhân đạo sâu sắc trong tác phẩm Vợ nhặt."
     c7 = chunker._detect_content_type("Phân tích tác phẩm", analysis_content)
     assert c7 == "analysis"
     
-    # 8. Prose
+    
     prose_content = "Kim Lân là nhà văn chuyên viết truyện ngắn và đã có một số tác phẩm có giá trị."
     c8 = chunker._detect_content_type("Giới thiệu", prose_content)
     assert c8 == "prose"
@@ -180,7 +180,7 @@ def test_section_subsection_mapping(chunker):
     """
     Test that section level determines section_title and subsection_title mapping.
     """
-    # Level 1 section
+    
     sec_l1 = DocumentSection(
         title="I. TÁC GIẢ KIM LÂN",
         level=1,
@@ -194,7 +194,7 @@ def test_section_subsection_mapping(chunker):
     assert chunks_l1[0].subsection_title is None
     assert chunks_l1[0].parent_section == "VỢ NHẶT"
 
-    # Level 2 section
+    
     sec_l2 = DocumentSection(
         title="1. Hoàn cảnh sáng tác",
         level=2,
@@ -213,12 +213,12 @@ def test_overlap_generation(chunker):
     """
     Test that overlap is correctly generated and prepended between chunks in the same section.
     """
-    # Create long paragraphs to trigger split.
-    # To trigger a split on topic, we'll use topic changes in the paragraphs:
-    # Paragraph 1 contains "giá trị hiện thực"
-    # Paragraph 2 contains "giá trị nhân đạo"
-    # We make Paragraph 1 have >50 words to allow overlap.
-    p1 = "Giá trị hiện thực của tác phẩm được thể hiện qua bức tranh nạn đói khủng khiếp năm 1945. " * 10  # 150 words
+    
+    
+    
+    
+    
+    p1 = "Giá trị hiện thực của tác phẩm được thể hiện qua bức tranh nạn đói khủng khiếp năm 1945. " * 10  
     p2 = "Bên cạnh đó, giá trị nhân đạo của Vợ nhặt lại toả sáng qua tình yêu thương giữa những người nghèo."
     
     sections = [
@@ -311,18 +311,18 @@ def test_keep_quotation_with_explanation(chunker):
             page_start=12,
             page_end=12,
             content=[
-                'Nhân vật Tràng nói: "Thôi thì làm quen!"',  # Ends with quote
+                'Nhân vật Tràng nói: "Thôi thì làm quen!"',  
                 "Câu nói ngẫu hứng này thể hiện sự khao khát hạnh phúc giản đơn."
             ],
             parent_title=None
         )
     ]
-    # Even if there was a topic change or marker, ending with quote should prevent split.
-    # Let's add a marker to the next paragraph to try and force a split, but it should be blocked.
-    sections[0].content[1] = "Thứ nhất, câu nói này thể hiện khát khao hạnh phúc." # starts with marker
+    
+    
+    sections[0].content[1] = "Thứ nhất, câu nói này thể hiện khát khao hạnh phúc." 
     
     chunks = chunker.chunk(sections)
-    assert len(chunks) == 1  # Should remain in 1 chunk
+    assert len(chunks) == 1  
 
 
 def test_prompt_test_case(chunker):
@@ -372,5 +372,5 @@ def test_token_char_count(chunker):
     ]
     chunks = chunker.chunk(sections)
     assert len(chunks) == 1
-    assert chunks[0].token_count == 11  # 11 words
+    assert chunks[0].token_count == 11  
     assert chunks[0].char_count == len(text)

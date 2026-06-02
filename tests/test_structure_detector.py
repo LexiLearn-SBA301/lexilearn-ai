@@ -20,7 +20,7 @@ def test_is_roman_heading(detector):
     assert detector._is_roman_heading("I. TÁC GIẢ") is True
     assert detector._is_roman_heading("IV. TỔNG KẾT") is True
     assert detector._is_roman_heading("XII. PHẦN MỞ RỘNG") is True
-    # Roman check is case-sensitive as per implementation plan to avoid matching lower-case letters
+    
     assert detector._is_roman_heading("i. tác giả") is False
     assert detector._is_roman_heading("a. tác giả") is False
     assert detector._is_roman_heading("1. tác giả") is False
@@ -44,7 +44,7 @@ def test_is_letter_heading(detector):
     """
     assert detector._is_letter_heading("a) Hoàn cảnh xuất hiện") is True
     assert detector._is_letter_heading("b. Diễn biến tâm lý") is True
-    # Letter check is lowercase only to distinguish from uppercase headings or other levels
+    
     assert detector._is_letter_heading("A) Hoàn cảnh") is False
     assert detector._is_letter_heading("I. Tác giả") is False
     assert detector._is_letter_heading("1. Tác giả") is False
@@ -57,15 +57,15 @@ def test_is_main_title(detector):
     assert detector._is_main_title("VỢ NHẶT") is True
     assert detector._is_main_title("TÂY TIẾN") is True
     assert detector._is_main_title("CHÍ PHÈO") is True
-    # Too long
+    
     assert detector._is_main_title("VỢ NHẶT " * 20) is False
-    # Not uppercase
+    
     assert detector._is_main_title("Vợ Nhặt") is False
-    # Starts with roman/number/letter patterns
+    
     assert detector._is_main_title("I. VỢ NHẶT") is False
     assert detector._is_main_title("1. VỢ NHẶT") is False
     assert detector._is_main_title("a) VỢ NHẶT") is False
-    # No alphabetic characters
+    
     assert detector._is_main_title("123456") is False
 
 
@@ -77,7 +77,7 @@ def test_classify_heading_level(detector):
     assert detector._classify_heading_level("I. TÁC GIẢ") == 1
     assert detector._classify_heading_level("1. Nhân vật Tràng") == 2
     assert detector._classify_heading_level("a) Hoàn cảnh") == 3
-    # Unclassifiable defaults to level 1
+    
     assert detector._classify_heading_level("ngẫu nhiên một tiêu đề") == 1
 
 
@@ -157,7 +157,7 @@ def test_detect_full_hierarchy(detector):
     sections = detector.detect(elements)
     assert len(sections) == 6
     
-    # [L0] VỢ NHẶT
+    
     assert sections[0].title == "VỢ NHẶT"
     assert sections[0].level == 0
     assert sections[0].parent_title is None
@@ -165,12 +165,12 @@ def test_detect_full_hierarchy(detector):
     assert sections[0].page_end == 12
     assert sections[0].content == ["Đoạn mở đầu"]
 
-    # [L1] I. TÁC GIẢ
+    
     assert sections[1].title == "I. TÁC GIẢ"
     assert sections[1].level == 1
     assert sections[1].parent_title == "VỢ NHẶT"
     
-    # [L2] 1. Tiểu sử
+    
     assert sections[2].title == "1. Tiểu sử"
     assert sections[2].level == 2
     assert sections[2].parent_title == "I. TÁC GIẢ"
@@ -178,17 +178,17 @@ def test_detect_full_hierarchy(detector):
     assert sections[2].page_end == 13
     assert sections[2].content == ["Kim Lân..."]
 
-    # [L1] II. TÁC PHẨM
+    
     assert sections[3].title == "II. TÁC PHẨM"
     assert sections[3].level == 1
     assert sections[3].parent_title == "VỢ NHẶT"
 
-    # [L2] 1. Hoàn cảnh sáng tác
+    
     assert sections[4].title == "1. Hoàn cảnh sáng tác"
     assert sections[4].level == 2
     assert sections[4].parent_title == "II. TÁC PHẨM"
 
-    # [L3] a) Bối cảnh lịch sử
+    
     assert sections[5].title == "a) Bối cảnh lịch sử"
     assert sections[5].level == 3
     assert sections[5].parent_title == "1. Hoàn cảnh sáng tác"

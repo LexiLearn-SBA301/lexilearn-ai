@@ -1,0 +1,802 @@
+[
+  {
+    "id": 1,
+    "query": "Hình ảnh thiên nhiên Tây Tiến trong bài thơ cùng tên của Quang Dũng được khắc họa qua những chi tiết nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Tây Tiến",
+    "expected_answer": "Thiên nhiên Tây Tiến hiện lên hùng vĩ, hiểm trở (sương lấp dốc, khúc khuỷu, heo hút cồn mây, súng ngửi trời, mưa xa khơi, thác gầm thét, cọp trêu người) và cũng rất trữ tình, thơ mộng (chiều sương, hồn lau, hoa đong đưa, dáng người trên độc mộc)."
+  },
+  {
+    "id": 2,
+    "query": "Phân tích bức chân dung người lính Tây Tiến được tác giả khắc họa trong bài thơ.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Tây Tiến",
+    "expected_answer": "Chân dung người lính Tây Tiến hiện lên đầy bi tráng: ngoại hình tiều tụy vì sốt rét rừng (không mọc tóc, quân xanh màu lá) nhưng tư thế vẫn kiêu dũng (dữ oai hùm, mắt trừng gửi mộng), tâm hồn lãng mạn lãng hoa (mơ Hà Nội dáng kiều thơm), sẵn sàng hy sinh hiến dâng (chiến trường đi chẳng tiếc đời xanh, áo bào thay chiếu anh về đất)."
+  },
+  {
+    "id": 3,
+    "query": "Ý nghĩa hai câu thơ: 'Tây Tiến đoàn binh không mọc tóc / Quân xanh màu lá dữ oai hùm' là gì?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Tây Tiến",
+    "expected_answer": "Hai câu thơ tái hiện chân thực hiện thực tàn khốc của chiến tranh qua căn bệnh sốt rét rừng tàn phá sức khỏe người lính (rụng tóc, da xanh xao như lá cây), đồng thời ca ngợi khí phách kiên cường, dũng mãnh tựa hổ dữ (dữ oai hùm) đầy kiêu hãnh của họ."
+  },
+  {
+    "id": 4,
+    "query": "Bút pháp nghệ thuật nổi bật nhất của bài thơ Tây Tiến là gì?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Tây Tiến",
+    "expected_answer": "Bút pháp lãng mạn kết hợp hài hòa với cảm hứng bi tráng, ngôn từ giàu chất nhạc và họa, kết hợp sử dụng nhiều từ Hán Việt cổ kính."
+  },
+  {
+    "id": 5,
+    "query": "Vẻ đẹp bi tráng trong sự hy sinh của người lính Tây Tiến thể hiện như thế nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Tây Tiến",
+    "expected_answer": "Sự hy sinh được nhìn nhận nhẹ nhàng như một sự trở về với đất mẹ đại ngàn (anh về đất, sông Mã gầm lên khúc độc hành), cái chết được sử thi hóa bằng hình ảnh 'áo bào thay chiếu' trang trọng thay vì manh chiếu đơn sơ của hiện thực gian khổ."
+  },
+  {
+    "id": 6,
+    "query": "Hoàn cảnh sáng tác bài thơ Việt Bắc của Tố Hữu.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Việt Bắc",
+    "expected_answer": "Sáng tác vào tháng 10 năm 1954, nhân sự kiện các cơ quan Trung ương Đảng, Chính phủ rời chiến khu Việt Bắc trở về thủ đô Hà Nội sau chiến thắng Điện Biên Phủ và hiệp định Giơ-ne-vơ."
+  },
+  {
+    "id": 7,
+    "query": "Ý nghĩa của cấu trúc đối đáp 'ta' và 'mình' trong bài thơ Việt Bắc.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Việt Bắc",
+    "expected_answer": "Sử dụng cách xưng hô đối đáp ca dao truyền thống 'ta' - 'mình' của tình yêu đôi lứa để diễn tả tình cảm gắn bó cách mạng keo sơn, sâu nặng giữa nhân dân Việt Bắc (kẻ ở) và cán bộ kháng chiến (người đi)."
+  },
+  {
+    "id": 8,
+    "query": "Phân tích bức tranh tứ bình Việt Bắc trong đoạn thơ 'Ta về, mình có nhớ ta...'.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Việt Bắc",
+    "expected_answer": "Bức tranh tứ bình gồm 4 mùa hài hòa giữa thiên nhiên và con người: Mùa đông (hoa chuối đỏ tươi, người đi dao gài thắt lưng); Mùa xuân (mơ nở trắng rừng, người đan nón chuốt từng sợi giang); Mùa hạ (rừng phách đổ vàng, cô em gái hái măng một mình); Mùa thu (trăng rọi hòa bình, tiếng hát ân tình thủy chung)."
+  },
+  {
+    "id": 9,
+    "query": "Vẻ đẹp của nghĩa tình cách mạng thủy chung trong bài thơ Việt Bắc.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Việt Bắc",
+    "expected_answer": "Thể hiện qua sự đồng cam cộng khổ (chia củ sắn lùi, bát cơm sẻ nửa, chăn sui đắp cùng), nỗi nhớ khôn nguôi về chiến khu kháng chiến anh dũng, hào hùng và niềm tin sắt son vào sự chỉ đạo của Đảng, Chính phủ."
+  },
+  {
+    "id": 10,
+    "query": "Nêu những nét đặc sắc nghệ thuật đậm đà tính dân tộc của bài thơ Việt Bắc.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Việt Bắc",
+    "expected_answer": "Sử dụng thể thơ lục bát truyền thống điêu luyện, cấu trúc đối đáp ngọt ngào như ca dao, giọng điệu tâm tình da diết, sử dụng nhiều đại từ xưng hô dân dã và nhạc điệu trầm bổng tinh tế."
+  },
+  {
+    "id": 11,
+    "query": "Cảm nhận mới mẻ về cội nguồn Đất Nước của Nguyễn Khoa Điềm ở phần đầu đoạn trích.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Đất Nước",
+    "expected_answer": "Đất Nước không phải là khái niệm trừu tượng mà vô cùng thân thuộc, gần gũi, gắn liền với những câu chuyện cổ tích mẹ kể, thói quen ăn trầu của bà, cái kèo cái cột, hạt gạo ta ăn hàng ngày, có từ khi ta sinh ra và lớn lên."
+  },
+  {
+    "id": 12,
+    "query": "Đất Nước được định nghĩa trên các phương diện địa lý, lịch sử và văn hóa như thế nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Đất Nước",
+    "expected_answer": "Về địa lý: là không gian riêng tư lãng mạn của đôi lứa (đất là nơi anh đến trường, nước là nơi em tắm); Về lịch sử: là thời gian đằng đẵng từ truyền thuyết Hùng Vương, các thế hệ đi trước dựng xây và gìn giữ; Về văn hóa: là lối sống chung thủy, yêu nước, lao động cần cù sáng tạo lưu truyền lại."
+  },
+  {
+    "id": 13,
+    "query": "Tư tưởng cốt lõi 'Đất Nước của Nhân dân' được thể hiện thế nào trong bài thơ?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Đất Nước",
+    "expected_answer": "Nhân dân chính là người kiến tạo Đất Nước: những người vô danh âm thầm cống hiến (những người vợ nhớ chồng, cặp vợ chồng yêu nhau góp núi vọng phu, hòn trống mái), họ truyền lại ngọn lửa văn hóa, ngôn ngữ tiếng nói cho thế hệ mai sau và đứng lên đấu tranh bảo vệ bờ cõi khi giặc ngoại xâm tới."
+  },
+  {
+    "id": 14,
+    "query": "Nêu nét đặc sắc trong việc sử dụng chất liệu văn hóa dân gian của Nguyễn Khoa Điềm.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Đất Nước",
+    "expected_answer": "Sử dụng tinh tế các câu chuyện cổ tích (Mị Châu - Trọng Thủy, Trầu cau, Thánh Gióng), ca dao dân ca thấm đượm linh hồn quê hương bản xứ mà không cần trích dẫn nguyên văn, tạo nên giọng điệu tự nhiên, trữ tình sâu lắng."
+  },
+  {
+    "id": 15,
+    "query": "Sự tương đồng giữa hình tượng 'Sóng' và 'Em' trong bài thơ của Xuân Quỳnh.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Sóng",
+    "expected_answer": "Sóng và Em có sự hòa hợp, hóa thân lẫn nhau: đều mang trạng thái phức tạp, đối lập trong tình yêu (dữ dội - dịu êm, ồn ào - lặng lẽ), đều khát khao vươn ra biển lớn tình yêu rộng mở, và cùng mang hơi thở thổn thức tự nhiên của trái tim người phụ nữ."
+  },
+  {
+    "id": 16,
+    "query": "Nỗi nhớ trong tình yêu được Xuân Quỳnh diễn tả như thế nào qua hình tượng sóng?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Sóng",
+    "expected_answer": "Nỗi nhớ bao trùm không gian và thời gian (lòng em nhớ đến phương Bắc, phương Nam), len lỏi vào tiềm thức (con sóng dưới lòng sâu, con sóng trên mặt nước, sóng nhớ bờ ngày đêm không ngủ được, cả trong mơ còn thức) thể hiện tình yêu nồng nàn, thủy chung."
+  },
+  {
+    "id": 17,
+    "query": "Khát vọng tình yêu vĩnh cửu và sự chung thủy của người phụ nữ thể hiện thế nào trong bài thơ Sóng?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Sóng",
+    "expected_answer": "Chỉ hướng về một phương duy nhất (phương anh), tin tưởng vào sức mạnh của tình yêu vượt qua mọi giông bão cuộc đời (hướng về bờ) và khát khao được hòa mình vào trăm con sóng nhỏ giữa đại dương tình yêu bất tận để trường tồn mãi mãi."
+  },
+  {
+    "id": 18,
+    "query": "Đặc sắc nghệ thuật và nhịp điệu của bài thơ Sóng.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Sóng",
+    "expected_answer": "Thể thơ 5 chữ nhịp nhàng như nhịp sóng vỗ, kết cấu sóng đôi linh hoạt (Sóng và Em), hình ảnh thơ giản dị nhưng mang tính ẩn dụ biểu tượng triết lý cao."
+  },
+  {
+    "id": 19,
+    "query": "Hình tượng người nghệ sĩ Lor-ca được Thanh Thảo khắc họa thế nào trong bài thơ Đàn ghi ta của Lor-ca?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Đàn ghi ta của Lor-ca",
+    "expected_answer": "Khắc họa Lor-ca như một hiệp sĩ tự do, nghệ sĩ lãng tử mang khát vọng cách tân nghệ thuật mạnh mẽ chống lại nền chính trị bạo tàn độc tài Tây Ban Nha, dẫu bị sát hại dã man nhưng linh hồn nghệ thuật tự do và tiếng đàn của ông vẫn sống mãi."
+  },
+  {
+    "id": 20,
+    "query": "Ý nghĩa biểu tượng tiếng đàn ghi ta và chuỗi từ 'li-la li-la li-la' cuối bài thơ.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-1-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Đàn ghi ta của Lor-ca",
+    "expected_answer": "Tiếng đàn ghi ta đại diện cho nghệ thuật thiêng liêng, cái đẹp trường tồn. Chuỗi âm thanh 'li-la li-la li-la' tựa như những bông hoa tử đinh hương nở rộ trên nấm mồ người chiến sĩ cách tân, biểu thị sự bất tử của lý tưởng Lor-ca."
+  },
+  {
+    "id": 21,
+    "query": "Hình tượng con sông Đà hung bạo dữ dội được Nguyễn Tuân miêu tả qua chi tiết nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Người lái đò Sông Đà",
+    "expected_answer": "Vẻ hung bạo thể hiện qua: đá bờ sông dựng vách thành hẹp đến mức hươu nai nhảy qua được, lòng sông hẹp tối; tiếng nước réo réo ghê rợn ở quãng hát loóng; những hút nước sâu thẳm xoáy tít hút như giếng bê tông; thạch trận đá ngầm bày binh bố trận mai phục hòng nuốt chửng thuyền bè."
+  },
+  {
+    "id": 22,
+    "query": "Vẻ đẹp trữ tình, thơ mộng của sông Đà hiện lên như thế nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Người lái đò Sông Đà",
+    "expected_answer": "Dưới ngòi bút trữ tình, sông Đà uốn lượn như 'áng tóc trữ tình' mềm mại, nước sông thay đổi sắc màu kỳ ảo theo mùa (mùa xuân xanh ngọc bích, mùa thu lừ lừ chín đỏ), bờ sông tĩnh lặng thanh bình tựa kỷ nguyên tiền sử, cỏ tranh đẫm sương đêm nở hoa xuân ấm áp."
+  },
+  {
+    "id": 23,
+    "query": "Hình tượng người lái đò sông Đà được khắc họa như thế nào trong cuộc chiến vượt thác?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Người lái đò Sông Đà",
+    "expected_answer": "Hiện lên như một dũng sĩ kiên cường, quả cảm, trí dũng song toàn (nắm chắc binh pháp của thần sông thần đá, linh hoạt phá các trùng vây thạch trận của dòng thác), đồng thời cũng là một nghệ sĩ tài hoa trong nghệ thuật chèo đò vượt ghềnh thác hiểm trở."
+  },
+  {
+    "id": 24,
+    "query": "Phong cách nghệ thuật tùy bút độc đáo của Nguyễn Tuân thể hiện thế nào trong Người lái đò sông Đà?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Người lái đò Sông Đà",
+    "expected_answer": "Thể hiện sự tài hoa, uyên bác tột cùng thông qua việc vận dụng kiến thức đa ngành (lịch sử, địa lý, điện ảnh, quân sự, võ thuật), ngôn từ biến hóa đa sắc sảo, độc đáo và tôn vinh vẻ đẹp con người lao động kiên cường."
+  },
+  {
+    "id": 25,
+    "query": "Miêu tả vẻ đẹp sông Hương ở thượng nguồn trong Ai đã đặt tên cho dòng sông của Hoàng Phủ Ngọc Tường.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Ai đã đặt tên cho dòng sông",
+    "expected_answer": "Sông Hương ở thượng nguồn tựa như 'bản trường ca của rừng già' hoang dại, mãnh liệt giữa bóng cây đại ngàn, cuộn xoáy qua các vực thẳm sâu, nhưng cũng có lúc trở nên dịu dàng, say đắm như cô gái Digan hoang dã tự do."
+  },
+  {
+    "id": 26,
+    "query": "Vẻ đẹp của sông Hương khi chảy qua thành phố Huế.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Ai đã đặt tên cho dòng sông",
+    "expected_answer": "Khi vào thành phố, sông Hương trôi đi chậm chạp, êm đềm như một 'điệu slow tình cảm', uốn lượn mềm mại như tiếng vâng không nói ra của tình yêu, tạo nên vẻ đẹp tĩnh lặng cổ kính trữ tình hài hòa cùng cố đô Huế."
+  },
+  {
+    "id": 27,
+    "query": "Mối quan hệ gắn bó sâu sắc giữa sông Hương với văn hóa và lịch sử Huế.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Ai đã đặt tên cho dòng sông",
+    "expected_answer": "Sông Hương là chứng nhân lịch sử trung thành chứng kiến bao thăng trầm kháng chiến dựng nước giữ nước, đồng thời là cội nguồn cảm hứng sinh ra nền âm nhạc cổ điển Huế (nhã nhạc cung đình Huế) và văn chương thi ca trữ tình xứ Huế."
+  },
+  {
+    "id": 28,
+    "query": "Cuộc đời đau khổ của nhân vật Mị khi làm dâu gạt nợ nhà thống lý Pá Tra trong truyện ngắn Vợ chồng A Phủ.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ chồng A Phủ",
+    "expected_answer": "Mị bị bóc lột sức lao động tàn nhẫn (làm việc quần quật suốt ngày đêm không ngừng nghỉ, so sánh mình không bằng con trâu con ngựa), bị đày đọa thể xác lẫn tinh thần (sống câm lặng trong căn buồng tối tăm có ô cửa sổ bằng bàn tay mờ mịt, buông xuôi, tê liệt ý thức phản kháng)."
+  },
+  {
+    "id": 29,
+    "query": "Phân tích diễn biến tâm lý và sức sống tiềm tàng của Mị thức tỉnh trong đêm tình mùa xuân ở Hồng Ngài.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ chồng A Phủ",
+    "expected_answer": "Tiếng sáo gọi bạn tình đã khơi dậy khát vọng tự do của Mị: Mị uống rượu ực từng bát, nhớ về quá khứ tươi đẹp tự do, nhận thức được mình vẫn còn trẻ và muốn đi chơi xuân. Dù bị A Sử trói đứng vào cột nhà, tâm hồn Mị vẫn bay theo tiếng sáo lơ lửng giữa đại ngàn."
+  },
+  {
+    "id": 30,
+    "query": "Diễn biến tâm lý dẫn đến hành động cắt dây cởi trói cứu A Phủ của Mị trong đêm đông.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ chồng A Phủ",
+    "expected_answer": "Ban đầu Mị dửng dưng sưởi lửa, nhưng khi nhìn thấy 'dòng nước mắt lấp lánh bò xuống má' của A Phủ, Mị đồng cảm với nỗi khổ đau, nhận ra sự tàn ác của nhà thống lý. Vượt qua nỗi sợ bị trói thay thế, Mị liều lĩnh cắt dây cởi trói cho A Phủ và cùng chạy trốn tự do."
+  },
+  {
+    "id": 31,
+    "query": "Hình tượng nhân vật A Phủ đại diện cho điều gì ở người nông dân miền núi?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ chồng A Phủ",
+    "expected_answer": "Đại diện cho số phận người nghèo miền núi bị áp bức cường quyền (bị đánh đập dã man, bắt phạt vạ làm nô lệ gạt nợ vì để hổ ăn mất bò), song vẫn giữ phẩm chất gan góc, yêu tự do, phản kháng mạnh mẽ chống lại phong kiến."
+  },
+  {
+    "id": 32,
+    "query": "Ý nghĩa nhan đề tác phẩm 'Vợ nhặt' của nhà văn Kim Lân là gì?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ Nhặt",
+    "expected_answer": "Ý nghĩa nhan đề phản ánh hiện thực thảm khốc của nạn đói năm 1945: mạng sống con người rẻ rúng như cái rơm cái rác giữa đường, có thể dễ dàng 'nhặt' được vợ chỉ bằng vài câu đùa và bốn bát bánh đúc qua ngày."
+  },
+  {
+    "id": 33,
+    "query": "Tình huống truyện độc đáo của truyện ngắn Vợ nhặt.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ Nhặt",
+    "expected_answer": "Tràng là một gã dân ngụ cư nghèo, thô kệch, lại dám lấy vợ giữa lúc nạn đói hoành hành dữ dội, người chết đói như ngả rạ. Tình huống mang tính trớ trêu: vừa đáng mừng (lấy được vợ) lại vừa đáng lo (liệu có nuôi nổi nhau qua nạn đói không)."
+  },
+  {
+    "id": 34,
+    "query": "Sự thay đổi tâm lý của nhân vật Tràng sau khi cưới vợ.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ Nhặt",
+    "expected_answer": "Tràng trưởng thành và có trách nhiệm hơn: thấy yêu thương gắn bó với ngôi nhà của mình, cảm thấy có bổn phận che chở nuôi nấng vợ con, hướng tới tương lai tốt đẹp (nghĩ về hình ảnh lá cờ đỏ sao vàng cách mạng)."
+  },
+  {
+    "id": 35,
+    "query": "Phân tích vẻ đẹp tâm hồn của nhân vật bà cụ Tứ trong Vợ nhặt.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Vợ Nhặt",
+    "expected_answer": "Bà cụ Tứ hiện lên với tình mẫu tử bao la: vừa mừng vừa tủi xót xa cho con mình lấy vợ giữa lúc đói kém, mở lòng chào đón con dâu bằng sự đùm bọc, nấu nồi cháo cám ấm áp tình thương và luôn động viên các con lạc quan hướng về ngày mai tươi sáng."
+  },
+  {
+    "id": 36,
+    "query": "Ý nghĩa biểu tượng của hình ảnh cây xà nu, rừng xà nu trong tác phẩm cùng tên của Nguyễn Trung Thành.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Rừng xà nu",
+    "expected_answer": "Cây xà nu biểu trưng cho cuộc sống, số phận đau thương của người dân Tây Nguyên dưới làn bom đạn giặc, đồng thời biểu trưng cho sức sống bất diệt, khao khát tự do, thế hệ nối tiếp thế hệ kiên cường chiến đấu của dân làng Xô Man."
+  },
+  {
+    "id": 37,
+    "query": "Cuộc đời anh hùng và phẩm chất của nhân vật Tnú.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Rừng xà nu",
+    "expected_answer": "Tnú là người chiến sĩ dũng cảm, gan dạ từ nhỏ (đi liên lạc bị bắt không khai), chịu nhiều đau thương gia đình (vợ con bị giặc giết hại, bản thân bị đốt 10 đầu ngón tay). Anh kiên cường vượt qua nỗi đau trở thành người lính giải phóng quân cầm súng diệt giặc."
+  },
+  {
+    "id": 38,
+    "query": "Lời căn dặn 'Chúng nó đã cầm súng, mình phải cầm giáo' của cụ Mết mang triết lý gì?",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Rừng xà nu",
+    "expected_answer": "Khẳng định chân lý cách mạng vũ trang: Để chống lại bạo lực vũ trang tàn bạo của kẻ thù thì nhân dân không còn con đường nào khác là phải cùng đứng lên cầm vũ khí chiến đấu tự giải phóng chính mình."
+  },
+  {
+    "id": 39,
+    "query": "Phân tích vẻ đẹp truyền thống gia đình cách mạng trong Những đứa con trong gia đình của Nguyễn Thi.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Những đứa con trong gia đình",
+    "expected_answer": "Gia đình Nam Bộ anh hùng gắn kết như dòng sông chảy xiết, thế hệ sau tiếp bước thế hệ trước: Người mẹ dũng cảm hy sinh thầm lặng, chú Năm lưu giữ cuốn sổ gia đình ghi chép chiến công, hai chị em Chiến và Việt hăng hái tòng quân trả thù nhà."
+  },
+  {
+    "id": 40,
+    "query": "So sánh tính cách của hai chị em Chiến và Việt trong tác phẩm.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Những đứa con trong gia đình",
+    "expected_answer": "Chiến lớn tuổi hơn, mang dáng dấp của người mẹ tần tảo, biết sắp xếp việc nhà chu toàn, đảm đang kiên nghị. Việt nhỏ tuổi hơn, tính cách ngây thơ tinh nghịch (thích bắt ếch, sợ ma) nhưng chiến đấu ngoan cường vô song như một dũng sĩ."
+  },
+  {
+    "id": 41,
+    "query": "Phân tích hai phát hiện đầy nghịch lý của nghệ sĩ nhiếp ảnh Phùng ở bờ biển trong Chiếc thuyền ngoài xa.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Chiếc thuyền ngoài xa",
+    "expected_answer": "Phát hiện thứ nhất: Vẻ đẹp nghệ thuật tuyệt mỹ 'đắt trời cho' của chiếc thuyền trong sương sớm. Phát hiện thứ hai: Hiện thực bạo lực gia đình tàn nhẫn bước ra từ chính chiếc thuyền thơ mộng đó (chồng đánh đập dã man vợ, con cầm dao chống lại cha)."
+  },
+  {
+    "id": 42,
+    "query": "Ý nghĩa câu chuyện cuộc đời của người đàn bà hàng chài ở tòa án huyện.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Chiếc thuyền ngoài xa",
+    "expected_answer": "Giải thích cho lý do bà không thể bỏ chồng: vì cần đàn ông chèo chống lúc phong ba nuôi đàn con, vì niềm vui nhỏ nhoi nhìn con được ăn no. Câu chuyện giúp Phùng và đẩu nhận thức sâu sắc rằng lý thuyết sách vở cần phải đi đôi với sự hiểu biết cuộc sống đa chiều."
+  },
+  {
+    "id": 43,
+    "query": "Nêu giá trị nhân đạo sâu sắc của truyện ngắn Chiếc thuyền ngoài xa.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Chiếc thuyền ngoài xa",
+    "expected_answer": "Tác phẩm thể hiện lòng trăn trở sâu sắc về số phận đau khổ của con người thời hậu chiến, phê phán cái nhìn nghệ thuật hời hợt, phiến diện xa rời hiện thực cuộc sống gian khó."
+  },
+  {
+    "id": 44,
+    "query": "Ý nghĩa bức ảnh nghệ thuật chiếc thuyền ngoài xa ở cuối truyện.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Chiếc thuyền ngoài xa",
+    "expected_answer": "Dù ảnh đen trắng chụp nghệ thuật rất đẹp, nhưng khi nhìn kỹ vẫn thấy hiện lên màu hồng hồng của sương mai và hình ảnh người đàn bà nghèo khổ bước ra từ tấm ảnh, biểu hiện mối quan hệ khăng khít giữa nghệ thuật và đời sống."
+  },
+  {
+    "id": 45,
+    "query": "Phân tích bi kịch trớ trêu của nhân vật Trương Ba khi phải trú ngụ trong xác hàng thịt.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Hồn Trương Ba da hàng thịt",
+    "expected_answer": "Hồn Trương Ba thanh cao phải chịu đựng sự sai khiến của xác hàng thịt phàm phu tục tử (thèm rượu thịt, thô lỗ bạo lực), bị gia đình (vợ, con dâu, cháu nội) xa lánh ghét bỏ vì sự thay đổi thô kệch bên ngoài."
+  },
+  {
+    "id": 46,
+    "query": "Ý nghĩa triết lý nhân sinh toát ra từ quyết định xin được chết hẳn của Trương Ba.",
+    "source_doc": "sach-giao-khoa-ngu-van-12-tap-2-co-ban",
+    "lop": 12,
+    "ten_tac_pham": "Hồn Trương Ba da hàng thịt",
+    "expected_answer": "Khẳng định chân lý: Con người chỉ thực sự hạnh phúc khi được sống là chính mình một cách toàn vẹn thống nhất giữa linh hồn và thể xác; sống vay mượn, giả dối chỉ đem lại đau khổ cho chính mình và người xung quanh."
+  },
+  {
+    "id": 47,
+    "query": "Tâm trạng buồn ngủ và khát vọng đợi tàu của chị em Liên trong Hai đứa trẻ của Thạch Lam.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Hai đứa trẻ",
+    "expected_answer": "Chị em Liên cố thức để đợi chuyến tàu đêm đi qua phố huyện vì đoàn tàu mang ánh sáng rực rỡ, âm thanh náo nhiệt khác hẳn cuộc sống tối tăm tù đọng nghèo khổ nơi phố huyện, biểu trưng cho giấc mơ về một thế giới tươi sáng hơn."
+  },
+  {
+    "id": 48,
+    "query": "Bức tranh phố huyện nghèo lúc chiều tàn được miêu tả qua các chi tiết nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Hai đứa trẻ",
+    "expected_answer": "Bức tranh yên tĩnh đượm buồn: tiếng trống thu không, sắc đỏ phương tây như lửa đốt, phố huyện tối dần rác rưởi chợ tàn, tiếng muỗi vo ve, những kiếp người nghèo khổ lặng lẽ xuất hiện dưới bóng tối âm u."
+  },
+  {
+    "id": 49,
+    "query": "Vẻ đẹp của nhân vật Huấn Cao trong Chữ người tử tù của Nguyễn Tuân.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Chữ người tử tù",
+    "expected_answer": "Huấn Cao hội tụ vẻ đẹp ba phương diện: tài hoa nghệ sĩ viết chữ thư pháp tuyệt đẹp, khí phách kiên cường bất khuất trước uy quyền bạo lực, và thiên lương trong sáng biết trân trọng cái đẹp đạo đức ở đời."
+  },
+  {
+    "id": 50,
+    "query": "Ý nghĩa cảnh cho chữ trong ngục tối cuối truyện ngắn Chữ người tử tù.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Chữ người tử tù",
+    "expected_answer": "Một cảnh tượng cổ kính chưa từng có: Trong buồng giam bẩn thỉu chật hẹp, người tử tù cổ đeo gông chân vướng xiềng đang say mê viết những nét chữ tươi tắn thơm ngát cho quản ngục vái lạy. Biểu hiện sự chiến thắng của cái đẹp và ánh sáng thiên lương trước bóng tối bạo tàn."
+  },
+  {
+    "id": 51,
+    "query": "Quá trình tha hóa từ một nông dân hiền lành thành quỷ dữ của nhân vật Chí Phèo.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Chí Phèo",
+    "expected_answer": "Chí Phèo vốn là lực điền hiền lành bị Bá Kiến đẩy vào tù. Sau khi ra tù, anh bị biến dạng cả nhân hình lẫn nhân tính (rạch mặt ăn vạ, nghiện rượu, trở thành tay sai đòi nợ đâm thuê chém mướn tàn phá dân làng Vũ Đại)."
+  },
+  {
+    "id": 52,
+    "query": "Sự thức tỉnh và khát khao hoàn lương của Chí Phèo nhờ tình thương của Thị Nở.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Chí Phèo",
+    "expected_answer": "Bát cháo hành nóng ấm của Thị Nở lần đầu tiên khơi dậy nhân tính trong Chí Phèo: Chí cảm thấy ăn năn, nhớ về ước mơ xưa có gia đình nhỏ cày ruộng cấy thuê, khát khao làm hòa với mọi người và mong muốn Thị Nở làm cầu nối đưa anh trở về cuộc sống làm người lương thiện."
+  },
+  {
+    "id": 53,
+    "query": "Ý nghĩa tiếng kêu cuối cùng của Chí Phèo: 'Ai cho tôi lương thiện?' trước khi chết.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Chí Phèo",
+    "expected_answer": "Lời khẩn cầu tuyệt vọng của người nông dân nghèo bị tha hóa: tố cáo xã hội thực dân nửa phong kiến tàn bạo cướp đi quyền làm người lương thiện của họ, khẳng định cái chết giữ phẩm giá còn hơn tiếp tục kiếp thú vật ăn vạ."
+  },
+  {
+    "id": 54,
+    "query": "Nỗi sầu nhân thế và không gian hoang vắng trong bài thơ Tràng giang của Huy Cận.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-2-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Tràng giang",
+    "expected_answer": "Bức tranh sông nước tràng giang vô biên, hiu quạnh: củi một cành khô lạc mấy dòng, cồn nhỏ lơ thơ gió đìu hiu, không một chuyến đò hay cầu nối, khói hoàng hôn buông xuống làm trỗi dậy nỗi nhớ quê hương sâu sắc (lòng quê dợn dợn vời con nước)."
+  },
+  {
+    "id": 55,
+    "query": "Vẻ đẹp trữ tình và thiên nhiên xứ Huế trong Đây thôn Vĩ Dạ của Hàn Mặc Tử.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-2-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Đây thôn Vĩ Dạ",
+    "expected_answer": "Hiện lên tươi đẹp thơ mộng lúc hừng đông: nắng hàng cau mới lên, vườn xanh như ngọc, lá trúc che ngang mặt chữ điền; hòa cùng vẻ u buồn mơ hồ mờ ảo của mây gió rẽ lối, dòng nước buồn thiu hoa bắp lay nhẹ."
+  },
+  {
+    "id": 56,
+    "query": "Khát vọng tự do và tinh thần thép của người chiến sĩ cách mạng trong bài thơ Chiều tối (Mộ) của Hồ Chí Minh.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-2-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Chiều tối",
+    "expected_answer": "Mặc dù mệt mỏi xiềng xích trên đường áp giải, tâm hồn Bác vẫn bay bổng hướng về thiên nhiên (cánh chim mỏi bay về rừng, chòm mây trôi nhẹ) và ấm áp niềm vui sự sống con người (thiếu nữ xay ngô tối, lò than đã rực hồng)."
+  },
+  {
+    "id": 57,
+    "query": "Tâm trạng reo vui, phấn khởi của người thanh niên yêu nước khi gặp lý tưởng cách mạng trong bài thơ Từ ấy của Tố Hữu.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-2-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Từ ấy",
+    "expected_answer": "Từ ấy là mốc son chói lọi cuộc đời Tố Hữu khi giác ngộ lý tưởng cộng sản: tâm hồn như bừng nắng hạ, mặt trời chân lý chói qua tim, tràn ngập niềm vui sướng hát ca như vườn hoa đậm hương rực rỡ sắc màu."
+  },
+  {
+    "id": 58,
+    "query": "Bi kịch của người nghệ sĩ Vũ Như Tô trong đoạn trích Vĩnh biệt Cửu Trùng Đài của Nguyễn Huy Tưởng.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Vĩnh biệt Cửu Trùng Đài",
+    "expected_answer": "Bi kịch mâu thuẫn giữa khát vọng nghệ thuật thuần túy cao siêu của Vũ Như Tô với lợi ích đời sống thực tế lầm than đói khổ của nhân dân, dẫn đến kết cục đài bị đốt, kiến trúc sư bị kết án tử hình tàn nhẫn."
+  },
+  {
+    "id": 59,
+    "query": "Tâm sự u uất của Hồ Xuân Hương thể hiện thế nào trong bài thơ Tự tình II?",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Tự tình II",
+    "expected_answer": "Tâm sự tủi hổ, buồn bã về duyên phận muộn màng, bẽ bàng đêm khuya (đêm khuya văng vẳng trống canh dồn), khát vọng vươn lên đấu tranh phản kháng số phận (xiên ngang mặt đất, đâm toạc chân mây) nhưng cuối cùng vẫn rơi vào ngậm ngùi buông xuôi cay đắng."
+  },
+  {
+    "id": 60,
+    "query": "Hình ảnh người phụ nữ tần tảo, giàu tình thương yêu trong bài thơ Thương vợ của Trần Tế Xương.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Thương vợ",
+    "expected_answer": "Bà Tú hiện lên vất vả nhọc nhằn kiếm sống nuôi chồng con (quanh năm buôn bán ở mom sông, lặn lội thân cò khi quãng vắng), mang phẩm chất chịu thương chịu khó hy sinh âm thầm (một duyên hai nợ âu đành phận, năm nắng mười mưa dám quản công)."
+  },
+  {
+    "id": 61,
+    "query": "Thái độ ngạo nghễ, khí phách của Nguyễn Công Trứ qua bài thơ Bài ca ngất ngưởng.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Bài ca ngất ngưởng",
+    "expected_answer": "Thái độ ngất ngưởng tự tin vượt lên trên mọi khuôn phép cương thường phong kiến gò bó: tự hào về tài năng đỗ đạt làm quan cống hiến lớn lao cho đất nước, khi cáo quan về quê vẫn cưỡi bò vàng đeo nhạc, ngao du hát ca thanh thản đứng ngoài vòng danh lợi."
+  },
+  {
+    "id": 62,
+    "query": "Nỗi lòng yêu nước u uất của Lê Hữu Trác qua đoạn trích Vào phủ Chúa Trịnh.",
+    "source_doc": "sach-giao-khoa-ngu-van-11-tap-1-co-ban",
+    "lop": 11,
+    "ten_tac_pham": "Vào phủ Chúa Trịnh",
+    "expected_answer": "Ghi lại chân thực cuộc sống xa hoa lộng lẫy uy quyền tột đỉnh nhưng ngột ngạt thiếu sinh khí trong phủ chúa, bày tỏ thái độ dửng dưng không màng danh lợi phú quý, khao khát tự do trở về rừng núi làm thầy thuốc giản dị cứu người."
+  },
+  {
+    "id": 63,
+    "query": "Ý nghĩa hình tượng hào khí Đông A trong bài thơ Tỏ lòng (Thuật hoài) của Phạm Ngũ Lão.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tỏ lòng",
+    "expected_answer": "Hào khí Đông A thể hiện qua tư thế ngạo nghễ dũng mãnh bảo vệ giang sơn (hoành sóc giang san cáp kỷ thu), khí thế bừng bừng vô song của quân đội nhà Trần (tam quân tì hổ khí thôn ngưu) và khát khao cống hiến lập công danh báo ơn đất nước."
+  },
+  {
+    "id": 64,
+    "query": "Bức tranh ngày hè rực rỡ và tấm lòng yêu nước thương dân của Nguyễn Trãi qua bài thơ Cảnh ngày hè (Quốc âm thi tập).",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Cảnh ngày hè",
+    "expected_answer": "Bức tranh ngày hè sống động đầy sức sống (hòe đùn tán rợp, thạch lựu phun thức đỏ, hồng liên trì đã tiễn mùi hương, chợ cá lao xao, lầu tịch dương sáo diều). Tấm lòng ưu ái mong ước có được cây đàn của vua Thuấn để gảy khúc dân giàu đủ ấm no khắp muôn nơi."
+  },
+  {
+    "id": 65,
+    "query": "Quan niệm sống lánh đục tìm trong của Nguyễn Bỉnh Khiêm qua bài thơ Nhàn.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Nhàn",
+    "expected_answer": "Quan niệm nhàn nhã tự tại: tránh xa chốn quan trường tranh giành lợi lộc đầy cạm bẫy (ta dại ta tìm nơi vắng vẻ, người khôn người đến chốn lao xao), hòa mình vào thiên nhiên ăn uống đạm bạc giản dị (thu ăn măng trúc đông ăn giá, xuân tắm hồ sen hạ tắm ao)."
+  },
+  {
+    "id": 66,
+    "query": "Lòng cảm thương sâu sắc của Nguyễn Du dành cho số phận người phụ nữ tài hoa bạc mệnh qua Đọc Tiểu Thanh kí.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Đọc Tiểu Thanh kí",
+    "expected_answer": "Xót thương cho nàng Tiểu Thanh tài sắc vẹn toàn nhưng bị vùi dập đau khổ phũ phàng, khái quát lên nỗi đau chung của kẻ có tài văn chương thơ phú thường bị trời ghét hại (nỗi hờn kim cổ trời khôn hỏi), khóc thương người xưa đồng thời tự thương cho số phận gian truân của chính mình."
+  },
+  {
+    "id": 67,
+    "query": "Nêu giá trị nhân đạo sâu sắc của tác phẩm Truyện Kiều (Nguyễn Du).",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Truyện Kiều",
+    "expected_answer": "Tố cáo các thế lực phong kiến tàn bạo chà đạp lên quyền sống con người, đề cao khát vọng tự do công lý chân chính, khẳng định tài năng vẻ đẹp tâm hồn nhân phẩm sáng ngời và cảm thương sâu sắc số phận đau khổ của Thúy Kiều."
+  },
+  {
+    "id": 68,
+    "query": "Tâm trạng đau xót của Thúy Kiều khi trao duyên cho em gái là Thúy Vân trong đoạn trích Trao duyên.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Truyện Kiều",
+    "expected_answer": "Kiều phải dùng lý lẽ thuyết phục, cúi đầu lạy Vân để nhờ thay mình trả nghĩa cho Kim Trọng. Tâm trạng nàng giằng xé đau đớn tột cùng khi trao lại kỷ vật tình yêu (chiếc vành, bức tờ thư), cảm thấy mình như đã chết đi nửa linh hồn vì tình yêu tan vỡ."
+  },
+  {
+    "id": 69,
+    "query": "Vẻ đẹp chí khí anh hùng hào kiệt của nhân vật Từ Hải trong đoạn trích Chí khí anh hùng.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Truyện Kiều",
+    "expected_answer": "Từ Hải mang tư thế phi thường vượt trội: không cam lòng sống êm đềm chật hẹp, dứt áo ra đi mưu cầu đại nghiệp bốn phương trời rộng lớn (thoắt trông nhờ bể khơi khơi), hứa hẹn ngày trở về vinh quang rực rỡ đón Kiều."
+  },
+  {
+    "id": 70,
+    "query": "Tư tưởng nhân nghĩa cứu nước cứu dân thể hiện thế nào trong Bình Ngô đại cáo của Nguyễn Trãi?",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Bình Ngô đại cáo",
+    "expected_answer": "Cốt lõi nhân nghĩa là yên dân và trừ bạo (Việc nhân nghĩa cốt ở yên dân, Quân điếu phạt trước lo trừ bạo), bảo vệ cuộc sống hòa bình thái bình cho nhân dân bằng cách đứng lên tiêu diệt giặc Minh tàn bạo xâm lược."
+  },
+  {
+    "id": 71,
+    "query": "Bản cáo trạng đanh thép tố cáo tội ác dã man của giặc Minh được Nguyễn Trãi viết thế nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Bình Ngô đại cáo",
+    "expected_answer": "Tố cáo tội ác tàn sát người dân vô tội dã man (nướng dân đen trên ngọn lửa hung tàn, chôn con đỏ xuống dưới hầm tai vạ), vắt kiệt sức lao động tài nguyên đất nước, phơi bày tội ác không thể dung thứ (Độc ác thay trúc Nam Sơn không ghi hết tội, Dơ bẩn thay nước Đông Hải không rửa sạch mùi)."
+  },
+  {
+    "id": 72,
+    "query": "Hào khí chiến thắng oanh liệt của nghĩa quân Lam Sơn được tái hiện qua các chi tiết nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Bình Ngô đại cáo",
+    "expected_answer": "Tái hiện bằng những hình ảnh so sánh kỳ vĩ, nhịp điệu dồn dập hùng hồn: nghĩa quân tiến lên sấm vang chớp giật, quân giặc thua trận chạy trối chết, máu chảy trôi chày thác lũ, tướng giặc Lương Minh, Liễu Thăng bị chém đầu thảm bại."
+  },
+  {
+    "id": 73,
+    "query": "Ý nghĩa lịch sử vĩ đại của Bình Ngô đại cáo đối với dân tộc.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Bình Ngô đại cáo",
+    "expected_answer": "Được coi là bản Tuyên ngôn độc lập thứ hai của dân tộc Việt Nam, khẳng định chủ quyền lãnh thổ, bờ cõi văn hiến riêng biệt và mở ra kỷ nguyên mới hòa bình thịnh trị bền vững."
+  },
+  {
+    "id": 74,
+    "query": "Bài học lịch sử rút ra từ bi kịch mất nước của An Dương Vương trong truyền thuyết Mị Châu - Trọng Thủy.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Truyện An Dương Vương và Mị Châu - Trọng Thủy",
+    "expected_answer": "Bài học xương máu về tinh thần cảnh giác cách mạng trước âm mưu gián điệp của kẻ thù: không được chủ quan coi thường giặc, không đặt tình cảm gia đình riêng tư lên trên an nguy độc lập của quốc gia lãnh thổ."
+  },
+  {
+    "id": 75,
+    "query": "Ý nghĩa hình ảnh ngọc trai giếng nước ở cuối truyện An Dương Vương.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Truyện An Dương Vương và Mị Châu - Trọng Thủy",
+    "expected_answer": "Giải oan cho tấm lòng trong trắng ngây thơ của Mị Châu bị Trọng Thủy lợi dụng, đồng thời biểu trưng cho tình yêu chân thành nhưng muộn màng đầy bi kịch ân hận của Trọng Thủy dành cho nàng."
+  },
+  {
+    "id": 76,
+    "query": "Ý nghĩa cuộc đấu tranh giành lại hạnh phúc của cô Tấm qua các lần biến hóa trong truyện cổ tích Tấm Cám.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tấm Cám",
+    "expected_answer": "Thể hiện sức sống dẻo dai, mãnh liệt của cái thiện chống lại cái ác: Tấm liên tục hồi sinh qua hình hài chim vàng anh, cây xoan đào, khung cửi, quả thị biểu thị chân lý cái thiện quyết không đầu hàng và cuối cùng chiến thắng cái ác tàn bạo."
+  },
+  {
+    "id": 77,
+    "query": "Tiếng cười châm biếm đả kích thói dốt nát thích khoe khoang trong truyện cười Tam đại con gà.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tam đại con gà",
+    "expected_answer": "Phê phán thầy đồ dốt nát chữ tác đánh chữ tộ, không biết chữ kê (gà) nhưng huênh hoang tự phụ, che giấu sự dốt bằng cách xin đài âm dương và lý sự cùn nực cười khi bị lật tẩy."
+  },
+  {
+    "id": 78,
+    "query": "Tiếng cười đả kích tệ tham nhũng xử án bất công của quan lại trong truyện cười Nhưng nó phải bằng hai mày.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Nhưng nó phải bằng hai mày",
+    "expected_answer": "Châm biếm hành vi đút lót nhận hối lộ của lý trưởng khi xử kiện: cả hai bên nguyên bị đều đút tiền âm thầm, quan xử kiện bẻ cong công lý dựa vào số tiền đút lót nhiều hơn của bên thắng cuộc."
+  },
+  {
+    "id": 79,
+    "query": "Hình ảnh người anh hùng sử thi Đăm Săn qua cảnh chiến thắng Mtao Mxây để cứu vợ cứu làng.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Sử thi Đăm Săn",
+    "expected_answer": "Đăm Săn hiện lên kiêu dũng phi thường: múa khiên dũng mãnh như gió bão, chém sập cột nhà Mtao Mxây, được ông Trời giúp sức chiến thắng kẻ thù gian ác mang lại hòa bình giàu có sung túc cho buôn làng Tây Nguyên."
+  },
+  {
+    "id": 80,
+    "query": "Giá trị biểu cảm nghệ thuật độc đáo của thể loại ca dao dân ca Việt Nam.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Ca dao",
+    "expected_answer": "Thể hiện tâm hồn giản dị, tình cảm chân thành yêu thương đùm bọc lẫn nhau của người lao động (ca dao yêu thương tình nghĩa, ca dao than thân), sử dụng ngôn từ mộc mạc ẩn dụ ví von ví von phong phú quen thuộc."
+  },
+  {
+    "id": 81,
+    "query": "Những đặc trưng cơ bản của văn học dân gian Việt Nam.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Văn học dân gian mang tính truyền miệng (oral), tính tập thể (collective) trong sáng tác và gắn liền trực tiếp sinh hoạt lễ hội cộng đồng văn hóa lúa nước của người nông dân."
+  },
+  {
+    "id": 82,
+    "query": "Tác phẩm sử thi đẻ đất đẻ nước mang giá trị gì đối với dân tộc Mường?",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Là bộ sử thi thần thoại đồ sộ giải thích nguồn gốc vũ trụ, trái đất, con người và sự hình thành buôn làng, xã hội cổ xưa của dân tộc Mường."
+  },
+  {
+    "id": 83,
+    "query": "Ý nghĩa hình ảnh gót chân Thánh Gióng trong kho tàng truyền thuyết dân gian.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Biểu trưng cho sức mạnh đồng lòng kháng chiến chống ngoại xâm phi thường của nhân dân, Thánh Gióng bay về trời để lại dấu tích bảo vệ bình yên cho quê hương tổ quốc."
+  },
+  {
+    "id": 84,
+    "query": "Phân tích giá trị nhân đạo sâu sắc của tác phẩm Chinh phụ ngâm khúc.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Chinh phụ ngâm khúc",
+    "expected_answer": "Bày tỏ tiếng nói oán ghét chiến tranh phi nghĩa chia lìa đôi lứa, cảm thương sâu sắc nỗi cô đơn mong nhớ vất vả mỏi mòn của người vợ chờ chồng đi chinh chiến biên ải phương xa."
+  },
+  {
+    "id": 85,
+    "query": "Nêu giá trị tố cáo xã hội phong kiến thối nát của Cung oán ngâm khúc.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Cung oán ngâm khúc",
+    "expected_answer": "Tố cáo chế độ cung tần mỹ nữ bóc lột hạnh phúc tự do của người phụ nữ, tiếng khóc đau đớn oán hận của người cung nữ tài sắc bị nhà vua bỏ rơi lạnh nhạt cô đơn trong hậu cung."
+  },
+  {
+    "id": 86,
+    "query": "Phẩm chất trung dũng, cương trực của anh hùng Trần Quốc Tuấn qua tác phẩm sử thi Ngô Sĩ Liên.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Hưng Đạo Đại Vương Trần Quốc Tuấn",
+    "expected_answer": "Trần Quốc Tuấn hiện lên trí dũng song toàn, gạt bỏ thù nhà vì nghĩa lớn đất nước, hết lòng yêu thương binh sĩ và để lại những lời khuyên răn vàng ngọc trị nước giữ nước quý báu cho đời sau."
+  },
+  {
+    "id": 87,
+    "query": "Hành động xử án công minh quả quyết của Thái sư Trần Thủ Độ.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Thái sư Trần Thủ Độ",
+    "expected_answer": "Trần Thủ Độ thẳng thắn, chính trực, thưởng phạt công minh: không thiên vị người nhà cậy thế cậy quyền đút lót cầu xin chức quan nhỏ, tôn trọng pháp luật giang sơn nước nhà trên hết."
+  },
+  {
+    "id": 88,
+    "query": "Nêu ý nghĩa nhân văn toát ra từ truyện cổ tích trầu cau.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Ca ngợi tình anh em ruột thịt gắn bó son sắt và tình nghĩa vợ chồng thủy chung gắn kết thiêng liêng, giải thích cội nguồn tục ăn trầu cau truyền thống lâu đời của người Việt."
+  },
+  {
+    "id": 89,
+    "query": "Đặc trưng cơ bản của văn học trung đại Việt Nam giai đoạn thế kỷ X đến hết thế kỷ XIX.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Chịu ảnh hưởng hệ tư tưởng Nho giáo, Phật giáo, Đạo giáo; viết bằng chữ Hán và chữ Nôm; mang tính quy phạm nghệ thuật nghiêm ngặt song vẫn đậm đà tinh thần yêu nước dân tộc tự cường."
+  },
+  {
+    "id": 90,
+    "query": "Vai trò to lớn của chữ Nôm đối với sự phát triển văn học dân tộc cách mạng.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Giúp ghi lại tiếng nói, ngôn ngữ thuần việt tự nhiên phong phú; tạo điều kiện sinh ra những kiệt tác văn học quốc âm rực rỡ như Truyện Kiều, thơ Hồ Xuân Hương, Nguyễn Trãi."
+  },
+  {
+    "id": 91,
+    "query": "Ca dao hài hước, châm biếm dân gian Việt Nam thường đả kích các đối tượng nào?",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Ca dao",
+    "expected_answer": "Đả kích thói hư tật xấu trong đời sống xã hội (lười biếng, sợ vợ, khoe khoang huênh hoang) và thói tham nhũng o ép người nghèo của giai cấp thống trị phong kiến."
+  },
+  {
+    "id": 92,
+    "query": "Hình tượng trăng trong thơ trung đại mang ý nghĩa biểu tượng gì?",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Trăng biểu trưng cho vẻ đẹp thanh cao của tự nhiên, là người bạn tri kỷ đàm đạo thơ phú và nhân chứng tâm sự cô đơn sâu kín của con người thi sĩ dã ngoại."
+  },
+  {
+    "id": 93,
+    "query": "Giá trị lịch sử to lớn của tác phẩm Đại Việt sử ký toàn thư của Ngô Sĩ Liên.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Hưng Đạo Đại Vương Trần Quốc Tuấn",
+    "expected_answer": "Là bộ chính sử biên niên cổ nhất còn lưu giữ ghi chép toàn diện lịch sử Việt Nam từ thời Hồng Bàng truyền thuyết đến triều đại nhà Hậu Lê, mang giá trị văn học sử học vô giá."
+  },
+  {
+    "id": 94,
+    "query": "Phân tích nghệ thuật miêu tả nội tâm nhân vật qua ngôn ngữ độc thoại trong Truyện Kiều.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-2-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Truyện Kiều",
+    "expected_answer": "Nguyễn Du sử dụng tinh tế ngôn ngữ độc thoại nội tâm sâu sắc giúp nhân vật Thúy Kiều phơi bày tâm trạng đau khổ giằng xé trực tiếp mà không cần sự can thiệp của người kể chuyện."
+  },
+  {
+    "id": 95,
+    "query": "Ý nghĩa chi tiết chiếc bóng trên vách tường trong Chuyện người con gái Nam Xương (Nguyễn Dữ).",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Là thắt nút mở nút bi kịch truyện: chiếc bóng oan khuất gián tiếp gây ra cái chết thương tâm của Vũ Nương vì sự ghen tuông mù quáng của Trương Sinh, đồng thời cũng chính giải oan cho nàng."
+  },
+  {
+    "id": 96,
+    "query": "Nêu giá trị hiện thực đanh thép của tiểu thuyết Hoàng Lê nhất thống chí (Ngô gia văn phái).",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Tái hiện sinh động chân thực sự sụp đổ thảm hại khó tránh khỏi của tập đoàn phong kiến Lê - Trịnh hèn nhát rệu rã và ca ngợi cuộc hành binh thần tốc đại phá quân Thanh oanh liệt của Quang Trung."
+  },
+  {
+    "id": 97,
+    "query": "Vẻ đẹp chí khí anh hùng quân tử của Nguyễn Trãi thể hiện qua thơ ca Quốc âm thi tập.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Cảnh ngày hè",
+    "expected_answer": "Chí khí yêu nước thương dân nồng nàn (lo trước nỗi lo của thiên hạ, vui sau niềm vui của thiên hạ), dù sống nhàn ẩn dật vẫn canh cánh nỗi lòng nợ nước ơn vua giữ vững phẩm chất trong sạch."
+  },
+  {
+    "id": 98,
+    "query": "Đặc trưng cấu trúc nghệ thuật thơ thất ngôn bát cú Đường luật truyền thống.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Định hình cấu trúc chặt chẽ gồm 8 câu 7 chữ chia làm 4 phần Đề - Thực - Luận - Kết, tuân thủ nghiêm ngặt quy tắc đối thanh luật bằng trắc và gieo vần độc đáo."
+  },
+  {
+    "id": 99,
+    "query": "Ý nghĩa bài học luân lý từ câu chuyện cười dân gian quả bí khổng lồ.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Châm biếm thói phóng đại, bốc phét khoe khoang nói dối vô lý của hai anh chàng qua việc đối đáp về quả bí khổng lồ và chiếc nồi nấu bí phi thực tế, răn dạy lối sống trung thực khiêm tốn."
+  },
+  {
+    "id": 100,
+    "query": "Vai trò vị trí của văn học chữ Nôm trong tiến trình lịch sử văn học Việt Nam trung đại.",
+    "source_doc": "sach-giao-khoa-ngu-van-10-tap-1-co-ban",
+    "lop": 10,
+    "ten_tac_pham": "Tổng quan văn học Việt Nam",
+    "expected_answer": "Đánh dấu bước nhảy vọt khẳng định ý thức tự chủ văn hóa ngôn ngữ dân tộc, góp phần dân chủ hóa văn chương đưa văn học gần gũi với đời sống lao động tâm hồn Việt Nam."
+  }
+]
