@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
 
-# Ensure src is on the path
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from models.chunk_schema import ChunkSchema, ChunkPosition, ChunkMetadata
@@ -46,14 +46,14 @@ class TestMongoWriter:
         mock_client_instance = MagicMock()
         mock_mongo_client.return_value = mock_client_instance
 
-        # Call constructor
+        
         writer = MongoWriter("mongodb+srv://user:pass@cluster.mongodb.net/test")
 
-        # Assert client called and connected
+        
         mock_mongo_client.assert_called_once_with("mongodb+srv://user:pass@cluster.mongodb.net/test")
         mock_client_instance.admin.command.assert_called_once_with("ping")
 
-        # Assert database and collection assigned
+        
         assert writer.db is not None
         assert writer.collection is not None
 
@@ -78,12 +78,12 @@ class TestMongoWriter:
 
         writer = MongoWriter("mongodb://localhost")
 
-        # Verify unique index on chunk_id was created
+        
         mock_collection.create_index.assert_any_call(
             [("chunk_id", 1)], unique=True, name="unique_chunk_id"
         )
 
-        # Verify metadata indexes were created
+        
         mock_collection.create_index.assert_any_call(
             [("metadata.ten_tac_pham", 1)], name="index_metadata_ten_tac_pham"
         )
@@ -100,12 +100,12 @@ class TestMongoWriter:
             [("is_active", 1)], name="index_is_active"
         )
 
-        # Verify text index on search_text was created
+        
         mock_collection.create_index.assert_any_call(
             [("search_text", "text")], name="search_text_index", default_language="none"
         )
 
-        # Verify create_search_index called for Vector Search index
+        
         mock_collection.create_search_index.assert_called_once()
 
     @patch("core.mongo_writer.MongoClient")
@@ -123,10 +123,10 @@ class TestMongoWriter:
         chunk = _make_dummy_chunk()
         inserted_id = writer.insert_chunk(chunk)
 
-        # Verify result and call
+        
         assert inserted_id == "mock_bson_id"
         mock_collection.insert_one.assert_called_once()
-        # Verify document content was dumped from Pydantic
+        
         call_args = mock_collection.insert_one.call_args[0][0]
         assert call_args["chunk_id"] == "vo-nhat_p012_c001"
         assert call_args["content_type"] == "prose"
@@ -149,7 +149,7 @@ class TestMongoWriter:
         ]
         inserted_ids = writer.insert_chunks(chunks)
 
-        # Verify bulk insert calls
+        
         assert inserted_ids == ["id_1", "id_2"]
         mock_collection.insert_many.assert_called_once()
         call_args = mock_collection.insert_many.call_args[0][0]
@@ -174,7 +174,7 @@ class TestMongoWriter:
         chunk = _make_dummy_chunk()
         result = writer.upsert_chunk(chunk)
 
-        # Verify upsert details
+        
         assert result["matched_count"] == 1
         assert result["modified_count"] == 0
         assert result["upserted_id"] is None
@@ -201,7 +201,7 @@ class TestMongoWriter:
         writer = MongoWriter("mongodb://localhost")
         modified_count = writer.deactivate_document("vo-nhat_12")
 
-        # Verify soft delete
+        
         assert modified_count == 15
         mock_collection.update_many.assert_called_once_with(
             {"source_doc_id": "vo-nhat_12"},
@@ -219,7 +219,7 @@ class TestMongoWriter:
 
         writer = MongoWriter("mongodb://localhost")
 
-        # Test document_exists
+        
         exists = writer.document_exists("vo-nhat_12")
         assert exists is True
         mock_collection.count_documents.assert_any_call(
@@ -227,12 +227,12 @@ class TestMongoWriter:
             limit=1
         )
 
-        # Test count_chunks
+        
         total_count = writer.count_chunks()
         assert total_count == 42
         mock_collection.count_documents.assert_any_call({})
 
-        # Test count_document_chunks
+        
         doc_count = writer.count_document_chunks("vo-nhat_12")
         assert doc_count == 18
         mock_collection.count_documents.assert_any_call({"source_doc_id": "vo-nhat_12"})

@@ -13,13 +13,13 @@ import threading
 import pytest
 from unittest.mock import patch, MagicMock
 
-# Ensure src is on the path
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.embedder import Embedder
 
 
-# ── Fixtures ────────────────────────────────────────────────────────
+
 
 @pytest.fixture(autouse=True)
 def reset_singleton():
@@ -61,7 +61,7 @@ def _make_mock_model(dimension=1024):
     return mock_model
 
 
-# ── Singleton Tests ─────────────────────────────────────────────────
+
 
 class TestSingleton:
     """Tests for the singleton pattern."""
@@ -111,7 +111,7 @@ class TestSingleton:
         assert e1 is not e2
 
 
-# ── Configuration Tests ─────────────────────────────────────────────
+
 
 class TestConfiguration:
     """Tests for configuration loading and properties."""
@@ -154,7 +154,7 @@ class TestConfiguration:
             Embedder(str(tmp_path / "nonexistent.json"))
 
 
-# ── Device Detection Tests ──────────────────────────────────────────
+
 
 class TestDeviceDetection:
     """Tests for auto device detection logic."""
@@ -189,7 +189,7 @@ class TestDeviceDetection:
             assert embedder.device == "mps"
 
 
-# ── LangChain Embedding Tests ──────────────────────────────────────
+
 
 class TestEmbedding:
     """Tests for embed_documents and embed_query (LangChain API)."""
@@ -241,7 +241,7 @@ class TestEmbedding:
         assert lc_model is embedder._model
 
 
-# ── Input Validation Tests ──────────────────────────────────────────
+
 
 class TestInputValidation:
     """Tests for input validation in embed_documents and embed_query."""
@@ -295,7 +295,7 @@ class TestInputValidation:
             embedder.embed_query(42)  # type: ignore[arg-type]
 
 
-# ── Edge Cases ──────────────────────────────────────────────────────
+
 
 class TestEdgeCases:
     """Tests for edge cases and special scenarios."""
