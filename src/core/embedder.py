@@ -177,7 +177,11 @@ class Embedder:
         Auto-detect the best available compute device.
         Priority order is defined in config: cuda > mps > cpu.
         """
-        import torch
+        try:
+            import torch
+        except ImportError:
+            logger.warning("torch not installed, defaulting to CPU")
+            return "cpu"
 
         device_checkers = {
             "cuda": torch.cuda.is_available,

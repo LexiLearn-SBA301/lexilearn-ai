@@ -222,7 +222,7 @@ class TestEmbedding:
         embedder = Embedder(config_path)
         texts = ["test"]
         embedder.embed_documents(texts)
-        embedder._model.embed_documents.assert_called_once_with(texts)
+        embedder._model.embed_documents.assert_called_once_with(texts)  # type: ignore[attr-defined]
 
     @patch("core.embedder.Embedder._load_model", return_value=_make_mock_model())
     @patch("core.embedder.Embedder._detect_device", return_value="cpu")
@@ -230,7 +230,7 @@ class TestEmbedding:
         """embed_query should delegate to the underlying LangChain model."""
         embedder = Embedder(config_path)
         embedder.embed_query("test query")
-        embedder._model.embed_query.assert_called_once_with("test query")
+        embedder._model.embed_query.assert_called_once_with("test query")  # type: ignore[attr-defined]
 
     @patch("core.embedder.Embedder._load_model", return_value=_make_mock_model())
     @patch("core.embedder.Embedder._detect_device", return_value="cpu")
@@ -260,7 +260,7 @@ class TestInputValidation:
         """Embedding a non-list should raise ValueError."""
         embedder = Embedder(config_path)
         with pytest.raises(ValueError, match="Expected list"):
-            embedder.embed_documents("not a list")
+            embedder.embed_documents("not a list")  # type: ignore[arg-type]
 
     @patch("core.embedder.Embedder._load_model", return_value=_make_mock_model())
     @patch("core.embedder.Embedder._detect_device", return_value="cpu")
@@ -268,7 +268,7 @@ class TestInputValidation:
         """Embedding a list with non-string items should raise ValueError."""
         embedder = Embedder(config_path)
         with pytest.raises(ValueError, match="expected str"):
-            embedder.embed_documents(["valid", 123])
+            embedder.embed_documents(["valid", 123])  # type: ignore[arg-type]
 
     @patch("core.embedder.Embedder._load_model", return_value=_make_mock_model())
     @patch("core.embedder.Embedder._detect_device", return_value="cpu")
@@ -292,7 +292,7 @@ class TestInputValidation:
         """Embedding a non-string query should raise ValueError."""
         embedder = Embedder(config_path)
         with pytest.raises(ValueError, match="Expected str"):
-            embedder.embed_query(42)
+            embedder.embed_query(42)  # type: ignore[arg-type]
 
 
 # ── Edge Cases ──────────────────────────────────────────────────────
