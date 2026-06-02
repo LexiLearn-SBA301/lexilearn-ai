@@ -1,0 +1,9 @@
+{
+  "model_name": "BAAI/bge-m3",
+  "dimension": 1024,
+  "batch_size": 32,
+  "max_length": 8192,
+  "normalize_embeddings": true,
+  "device_priority": ["cuda", "mps", "cpu"],
+  "show_progress_bar": false
+}
