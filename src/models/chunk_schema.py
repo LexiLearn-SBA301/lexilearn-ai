@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime, timezone
 
@@ -54,9 +54,9 @@ class ChunkSchema(BaseModel):
     model_version: str = Field(..., description="Phiên bản mô hình embedding sử dụng (tự sinh)")
     is_active: bool = Field(True, description="Đánh dấu chunk có đang kích hoạt/sử dụng không (bắt buộc)")
 
-    class Config:
-        populate_by_name = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
                 "chunk_id": "truyen-vo-nhat_p003_c02",
                 "source_doc_id": "truyen-vo-nhat_p003",
@@ -85,6 +85,7 @@ class ChunkSchema(BaseModel):
                 "is_active": True
             }
         }
+    )
 
 # Alias để tương thích ngược nếu cần gọi bằng class name cũ
 chunk_schema = ChunkSchema
