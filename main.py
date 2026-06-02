@@ -52,6 +52,26 @@ if __name__ == "__main__":
         default="docs", 
         help="Đường dẫn đến file PDF đơn lẻ hoặc thư mục chứa các file PDF cần nạp (mặc định: 'docs')."
     )
+    parser.add_argument(
+        "--query",
+        type=str,
+        help="Gửi câu hỏi truy vấn hệ thống RAG để nhận câu trả lời từ LLM."
+    )
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Chạy chương trình đánh giá tự động dựa trên bộ Ground Truth."
+    )
+    parser.add_argument(
+        "--lop",
+        type=int,
+        help="Bộ lọc lớp học (10, 11, 12) khi truy vấn."
+    )
+    parser.add_argument(
+        "--work",
+        type=str,
+        help="Bộ lọc tên tác phẩm văn học khi truy vấn."
+    )
 
     args = parser.parse_args()
 
@@ -119,7 +139,70 @@ if __name__ == "__main__":
             print(f"Lỗi nghiêm trọng khi khởi chạy tiến trình nạp: {e}")
             sys.exit(1)
 
+    elif args.query:
+        from services.rag_service import RAGService
+        
+        # Build filter dict
+        filters = {}
+        if args.lop:
+            filters["lop"] = args.lop
+        if args.work:
+            filters["ten_tac_pham"] = args.work
+            
+        print("=" * 80)
+        print(f"TRUY VẤN HỆ THỐNG RAG: {args.query}")
+        if filters:
+            print(f"Bộ lọc: {filters}")
+        print("=" * 80)
+        
+        try:
+            rag_service = RAGService()
+            result = rag_service.query(args.query, filters=filters)
+            
+            print("\nCÂU TRẢ LỜI TỪ HỆ THỐNG LLM:")
+            print("-" * 80)
+            print(result["answer"])
+            print("-" * 80)
+            
+            print(f"\nTÀI LIỆU THAM KHẢO TRÍCH XUẤT ({len(result['sources'])} chunks):")
+            for idx, src in enumerate(result["sources"]):
+                metadata = src.get("metadata", {})
+                title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
+                author = metadata.get("tac_gia", "Không rõ tác giả")
+                page = src.get("position", {}).get("page", "?")
+                score = src.get("rrf_score", 0.0)
+                print(f"\n[{idx + 1}] {title} - {author} (Trang {page}) | Điểm RRF: {score:.5f}")
+                print(f"    Nội dung: {src.get('content', '')[:250]}...")
+            print("=" * 80)
+            
+        except Exception as e:
+            print(f"Lỗi khi thực hiện truy vấn RAG: {e}")
+            sys.exit(1)
+            
+    elif args.evaluate:
+        from services.rag_service import RAGService
+        
+        print("=" * 80)
+        print("BẮT ĐẦU ĐÁNH GIÁ HỆ THỐNG RAG TRÊN BỘ DỮ LIỆU GROUND TRUTH")
+        print("=" * 80)
+        
+        try:
+            rag_service = RAGService()
+            result = rag_service.evaluate()
+            
+            print("\n" + "=" * 30 + " KẾT QUẢ ĐÁNH GIÁ " + "=" * 30)
+            print(f" * Tổng số câu hỏi đánh giá: {result['total_queries']}")
+            print(f" * Số lần truy vấn trúng đích (Hits): {result['hits']}")
+            print(f" * Tỉ lệ Hit Rate@{result['limit']}: {result['hit_rate'] * 100:.2f}%")
+            print(f" * Điểm số Mean Reciprocal Rank (MRR): {result['mrr']:.4f}")
+            print("=" * 80)
+            
+        except Exception as e:
+            print(f"Lỗi khi chạy đánh giá RAG: {e}")
+            sys.exit(1)
+
     else:
         # Default behavior: run uvicorn server
         import uvicorn
+        # Disable hot reload when executing via other command arguments to avoid loop triggers
         uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
