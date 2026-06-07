@@ -15,6 +15,16 @@ try:
 except ImportError:
     PyPDF2 = None
 
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
+
+try:
+    from pdf2image import convert_from_path
+except ImportError:
+    convert_from_path = None
+
 logger = logging.getLogger("rag-service.pdf-reader")
 
 import vietnamese
@@ -42,11 +52,20 @@ class PDFReader:
     }
 
     def __init__(self) -> None:
-        pass
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Configure Tesseract and Poppler paths if provided
+        tesseract_cmd = os.getenv("TESSERACT_CMD")
+        if pytesseract and tesseract_cmd and os.path.exists(tesseract_cmd):
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        
+        self.poppler_path = os.getenv("POPPLER_PATH")
 
     def read(self, file_path: str) -> List[ExtractedElement]:
         """
         Reads a PDF file and extracts a list of structured elements.
+        Falls back to PyPDF2 and Tesseract OCR if primary extraction fails or returns no content.
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PDF file not found at: {file_path}")
@@ -54,18 +73,39 @@ class PDFReader:
         source_file = os.path.basename(file_path)
         logger.info(f"Starting extraction for PDF file: {source_file}")
 
-        try:
-            return self._extract_with_pdfplumber(file_path, source_file)
-        except Exception as e:
-            logger.warning(
-                f"Primary extraction with pdfplumber failed for '{source_file}' due to: {e}. "
-                "Falling back to PyPDF2."
-            )
+        # Tầng 1: pdfplumber (nhanh nhất, hỗ trợ bảng)
+        elements = self._try_extract(self._extract_with_pdfplumber, file_path, source_file, "pdfplumber")
+        if elements:
+            return elements
 
+        # Tầng 2: PyPDF2 (fallback cơ bản)
+        elements = self._try_extract(self._extract_with_pypdf, file_path, source_file, "PyPDF2")
+        if elements:
+            return elements
+
+        # Tầng 3: Tesseract OCR (cho PDF quét ảnh)
+        elements = self._try_extract(self._extract_with_ocr, file_path, source_file, "Tesseract OCR")
+        if elements:
+            return elements
+
+        logger.error(f"Không thể trích xuất văn bản từ '{source_file}' bằng bất kỳ phương pháp nào.")
+        return []
+
+    def _try_extract(self, extract_func, file_path: str, source_file: str, method_name: str) -> List[ExtractedElement]:
+        """
+        Helper to run an extraction method safely. Returns elements if successful and not empty.
+        """
         try:
-            return self._extract_with_pypdf(file_path, source_file)
+            logger.info(f"Attempting extraction using {method_name}...")
+            elements = extract_func(file_path, source_file)
+            if elements:
+                logger.info(f"Successfully extracted {len(elements)} elements using {method_name}.")
+                return elements
+            else:
+                logger.warning(f"{method_name} returned 0 elements for '{source_file}'.")
+                return []
         except Exception as e:
-            logger.error(f"Fallback extraction with PyPDF2 also failed for '{source_file}': {e}")
+            logger.warning(f"Extraction with {method_name} failed for '{source_file}' due to: {e}")
             return []
 
     def _extract_with_pdfplumber(self, file_path: str, source_file: str) -> List[ExtractedElement]:
@@ -176,6 +216,54 @@ class PDFReader:
 
         return elements
 
+    def _extract_with_ocr(self, file_path: str, source_file: str) -> List[ExtractedElement]:
+        """
+        Third fallback parser using Tesseract OCR for scanned image PDFs.
+        Converts PDF pages to images and runs OCR to extract text.
+        """
+        if pytesseract is None or convert_from_path is None:
+            raise ImportError(
+                "OCR dependencies are not installed. "
+                "Please run: pip install pytesseract pdf2image"
+            )
+
+        elements: List[ExtractedElement] = []
+        
+        logger.info(f"Converting '{source_file}' to images for OCR...")
+        try:
+            # Convert PDF pages to PIL images
+            images = convert_from_path(file_path, poppler_path=self.poppler_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to convert PDF to images (check poppler installation): {e}")
+
+        total_pages = len(images)
+        logger.info(f"Starting OCR for {total_pages} pages in '{source_file}'...")
+
+        for page_idx, image in enumerate(images):
+            page_num = page_idx + 1
+            if page_num % 10 == 0 or page_num == 1:
+                logger.info(f"OCR progress: page {page_num}/{total_pages}")
+                
+            try:
+                # Preprocess: convert to grayscale
+                gray_image = image.convert('L')
+                
+                # Run Tesseract OCR for Vietnamese
+                page_text = pytesseract.image_to_string(gray_image, lang='vie')
+                
+                # OCR outputs raw unicode text, no TCVN3 encoding needed
+                self.current_page_is_tcvn3 = False
+                
+                parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
+                elements.extend(parsed_elements)
+            except Exception as page_err:
+                logger.warning(
+                    f"Error running OCR on page {page_num} of '{source_file}': {page_err}. "
+                    "Skipping page."
+                )
+                continue
+
+        return elements
     def _parse_text_layout(self, text: Optional[str], page_num: int, source_file: str) -> List[ExtractedElement]:
         """
         Parses raw text layout of a page line-by-line, merging lines into paragraphs

@@ -1,6 +1,10 @@
 import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from dotenv import load_dotenv
+
+# Load environment variables early
+load_dotenv()
 
 # Add src folder to sys.path
 sys.path.append("src")

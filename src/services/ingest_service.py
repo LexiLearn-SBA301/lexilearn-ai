@@ -152,6 +152,8 @@ class IngestService:
                 try:
                     # 1. Read PDF
                     elements = reader.read(pdf_path)
+                    if not elements:
+                        raise ValueError(f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text). Đây có thể là tệp PDF dạng ảnh quét (scanned image PDF) cần thực hiện OCR trước khi nạp.")
                     
                     # 2. Detect Structure
                     sections = detector.detect(elements)
@@ -164,7 +166,15 @@ class IngestService:
                     passed_chunks = [vc.chunk for vc in validated if vc.validation.passed]
 
                     if not passed_chunks:
-                        raise ValueError(f"No chunks in '{filename}' passed quality validation rules.")
+                        # Find the first few validation errors to report
+                        errors_summary = []
+                        for vc in validated[:3]:
+                            if not vc.validation.passed:
+                                errors_summary.append(f"{vc.chunk.chunk_id}: {', '.join(vc.validation.errors)}")
+                        raise ValueError(
+                            f"Không có chunk nào trong '{filename}' vượt qua quy tắc kiểm duyệt chất lượng. "
+                            f"Lỗi ví dụ: {'; '.join(errors_summary)}"
+                        )
 
                     # Deactivate existing chunks for this file (soft delete old run)
                     source_doc_id = os.path.splitext(filename)[0]
