@@ -135,7 +135,7 @@ if __name__ == "__main__":
                         for idx, err in enumerate(errors):
                             print(f"  {idx + 1}. {err}")
                     print("=" * 80)
-                    break
+                    sys.exit(0)
 
                 time.sleep(1.5)
 
@@ -178,6 +178,7 @@ if __name__ == "__main__":
                 print(f"\n[{idx + 1}] {title} - {author} (Trang {page}) | Điểm RRF: {score:.5f}")
                 print(f"    Nội dung: {src.get('content', '')[:250]}...")
             print("=" * 80)
+            sys.exit(0)
             
         except Exception as e:
             print(f"Lỗi khi thực hiện truy vấn RAG: {e}")
@@ -200,6 +201,7 @@ if __name__ == "__main__":
             print(f" * Tỉ lệ Hit Rate@{result['limit']}: {result['hit_rate'] * 100:.2f}%")
             print(f" * Điểm số Mean Reciprocal Rank (MRR): {result['mrr']:.4f}")
             print("=" * 80)
+            sys.exit(0)
             
         except Exception as e:
             print(f"Lỗi khi chạy đánh giá RAG: {e}")

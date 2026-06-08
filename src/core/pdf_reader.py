@@ -60,7 +60,7 @@ class PDFReader:
         if pytesseract and tesseract_cmd and os.path.exists(tesseract_cmd):
             pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         
-        self.poppler_path = os.getenv("POPPLER_PATH")
+        self.poppler_path: Optional[str] = os.getenv("POPPLER_PATH")
 
     def read(self, file_path: str) -> List[ExtractedElement]:
         """
@@ -232,7 +232,10 @@ class PDFReader:
         logger.info(f"Converting '{source_file}' to images for OCR...")
         try:
             # Convert PDF pages to PIL images
-            images = convert_from_path(file_path, poppler_path=self.poppler_path)
+            if self.poppler_path:
+                images = convert_from_path(file_path, poppler_path=self.poppler_path)
+            else:
+                images = convert_from_path(file_path)
         except Exception as e:
             raise RuntimeError(f"Failed to convert PDF to images (check poppler installation): {e}")
 
@@ -249,7 +252,13 @@ class PDFReader:
                 gray_image = image.convert('L')
                 
                 # Run Tesseract OCR for Vietnamese
-                page_text = pytesseract.image_to_string(gray_image, lang='vie')
+                raw_text = pytesseract.image_to_string(gray_image, lang='vie')
+                if isinstance(raw_text, bytes):
+                    page_text = raw_text.decode('utf-8')
+                elif isinstance(raw_text, str):
+                    page_text = raw_text
+                else:
+                    page_text = str(raw_text)
                 
                 # OCR outputs raw unicode text, no TCVN3 encoding needed
                 self.current_page_is_tcvn3 = False
@@ -264,6 +273,7 @@ class PDFReader:
                 continue
 
         return elements
+
     def _parse_text_layout(self, text: Optional[str], page_num: int, source_file: str) -> List[ExtractedElement]:
         """
         Parses raw text layout of a page line-by-line, merging lines into paragraphs
