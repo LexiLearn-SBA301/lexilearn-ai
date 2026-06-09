@@ -81,3 +81,4 @@ Thumbs.db
 *.sqlite
 *.db
 weights/
+validation_errors_report.md
