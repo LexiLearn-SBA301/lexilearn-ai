@@ -204,6 +204,8 @@ class Embedder:
         """
         Load the HuggingFaceEmbeddings model via LangChain.
         """
+        from dotenv import load_dotenv
+        load_dotenv()
         from langchain_huggingface import HuggingFaceEmbeddings
 
         logger.info("Loading model '%s' on device '%s' via LangChain...", self._model_name, self._device)
@@ -214,8 +216,8 @@ class Embedder:
             encode_kwargs={
                 "normalize_embeddings": self._normalize,
                 "batch_size": self._batch_size,
-                "show_progress_bar": self._show_progress,
             },
+            show_progress=self._show_progress,
         )
 
         logger.info("Model loaded successfully via LangChain HuggingFaceEmbeddings")

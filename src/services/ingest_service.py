@@ -152,6 +152,26 @@ class IngestService:
                 try:
                     # 1. Read PDF
                     elements = reader.read(pdf_path)
+                    if not elements:
+                        try:
+                            import pytesseract
+                            import pdf2image
+                            has_ocr_deps = True
+                        except ImportError:
+                            has_ocr_deps = False
+
+                        if not has_ocr_deps:
+                            raise ValueError(
+                                f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text). "
+                                "Không thể kích hoạt OCR dự phòng do thiếu thư viện 'pytesseract' hoặc 'pdf2image'. "
+                                "Vui lòng kiểm tra xem bạn đã kích hoạt môi trường ảo (.venv) chưa bằng cách chạy: "
+                                ".venv\\Scripts\\python main.py ..."
+                            )
+                        else:
+                            raise ValueError(
+                                f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và OCR dự phòng thất bại. "
+                                "Vui lòng kiểm tra lại đường dẫn cài đặt TESSERACT_CMD và POPPLER_PATH trong tệp .env."
+                            )
                     
                     # 2. Detect Structure
                     sections = detector.detect(elements)
@@ -164,7 +184,15 @@ class IngestService:
                     passed_chunks = [vc.chunk for vc in validated if vc.validation.passed]
 
                     if not passed_chunks:
-                        raise ValueError(f"No chunks in '{filename}' passed quality validation rules.")
+                        # Find the first few validation errors to report
+                        errors_summary = []
+                        for vc in validated[:3]:
+                            if not vc.validation.passed:
+                                errors_summary.append(f"{vc.chunk.chunk_id}: {', '.join(vc.validation.errors)}")
+                        raise ValueError(
+                            f"Không có chunk nào trong '{filename}' vượt qua quy tắc kiểm duyệt chất lượng. "
+                            f"Lỗi ví dụ: {'; '.join(errors_summary)}"
+                        )
 
                     # Deactivate existing chunks for this file (soft delete old run)
                     source_doc_id = os.path.splitext(filename)[0]
