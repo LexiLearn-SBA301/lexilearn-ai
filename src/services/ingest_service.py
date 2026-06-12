@@ -114,6 +114,36 @@ class IngestService:
         job = self.jobs_collection.find_one({"job_id": job_id}, {"_id": 0})
         return job
 
+    def _resolve_work_title(self, chunk_title: str, page_start: int, sections: list) -> str:
+        """
+        Traces the parent section chain in the DocumentSections to resolve the actual literary work name (Level 0).
+        """
+        matching_section = None
+        for sec in sections:
+            if sec.title == chunk_title and sec.page_start <= page_start <= sec.page_end:
+                matching_section = sec
+                break
+                
+        if not matching_section:
+            for sec in sections:
+                if sec.title == chunk_title:
+                    matching_section = sec
+                    break
+                    
+        if not matching_section:
+            return chunk_title or "Sách Giáo Khoa"
+            
+        current = matching_section
+        visited = set()
+        while current and current.level > 0 and current.title not in visited:
+            visited.add(current.title)
+            parent = next((s for s in reversed(sections) if s.title == current.parent_title), None)
+            if not parent:
+                break
+            current = parent
+            
+        return current.title if current else chunk_title or "Sách Giáo Khoa"
+
     def _run_ingestion_sync(self, job_id: str, pdf_files: List[str]) -> None:
         """
         Synchronous background runner function executed in a separate thread.
@@ -213,7 +243,11 @@ class IngestService:
                             total_chunks=total_chunks
                         )
                         metadata = ChunkMetadata(
-                            ten_tac_pham=chunk.section_title or "Sách Giáo Khoa",
+                            ten_tac_pham=self._resolve_work_title(
+                                chunk.section_title,
+                                chunk.page_start,
+                                sections
+                            ),
                             tac_gia="Bộ Giáo Dục và Đào Tạo",
                             lop=file_metadata["lop"],
                             the_loai=chunk.content_type,

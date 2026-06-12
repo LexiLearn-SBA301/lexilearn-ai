@@ -1,5 +1,6 @@
 import re
 import logging
+import unicodedata
 from dataclasses import dataclass
 from typing import List, Optional
 from core.pdf_reader import ExtractedElement
@@ -31,6 +32,35 @@ class StructureDetector:
         self.numbered_pattern = re.compile(r"^\d+(\.\d+)*\.?\s+")
         self.letter_pattern = re.compile(r"^[a-z][\)\.]\s+")
 
+    def _normalize_for_matching(self, text: str) -> str:
+        if not text:
+            return ""
+        # Remove accents
+        normalized = unicodedata.normalize('NFD', text)
+        stripped = "".join([c for c in normalized if not unicodedata.combining(c)])
+        stripped = stripped.replace('Đ', 'D').replace('đ', 'd')
+        # Clean punctuation and extra spaces
+        cleaned = re.sub(r'[^a-zA-Z0-9\s-]', ' ', stripped)
+        return re.sub(r'\s+', ' ', cleaned).strip().lower()
+
+    def _is_generic_section_heading(self, text: str) -> bool:
+        normalized = self._normalize_for_matching(text)
+        
+        generic_keywords = {
+            "tieu dan", "van ban", "ghi nho", "huong dan hoc bai", 
+            "huong dan doc them", "huong dan tu hoc", "luyen tap", 
+            "tom tat", "tac gia", "tac pham", "doc hieu", "doc - hieu", 
+            "phan", "chuong", "bai", "muc luc", "loi noi dau", 
+            "tra bai lam van", "ket qua can dat", "on tap",
+            # OCR errors fallbacks
+            "huong dan huc bai", "huong dan hc bai", "huong dan hp bai", "huong dan duc them"
+        }
+        
+        for kw in generic_keywords:
+            if normalized == kw or normalized.startswith(kw + " ") or normalized.startswith(kw + " -"):
+                return True
+        return False
+
     def _is_roman_heading(self, text: str) -> bool:
         return bool(self.roman_pattern.match(text))
 
@@ -59,6 +89,10 @@ class StructureDetector:
 
     def _classify_heading_level(self, text: str) -> int:
         text_stripped = text.strip()
+        
+        if self._is_generic_section_heading(text_stripped):
+            return 1
+            
         if self._is_roman_heading(text_stripped):
             return 1
         elif self._is_letter_heading(text_stripped):

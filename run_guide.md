@@ -61,6 +61,30 @@ Tự động gửi câu hỏi từ tệp `ground_truth.json` (100 câu hỏi vă
 python main.py --evaluate
 ```
 
+### 4. Luồng Kiểm Thử Tự Động (Automated Testing)
+Hệ thống sử dụng thư viện `pytest` để chạy các bộ kiểm thử tự động, đảm bảo tính toàn vẹn của các module (Bảo mật InjectionGuard, Semantic Chunking, Embedder, Database, PDFReader...):
+
+* **Chạy toàn bộ các bài kiểm thử:**
+  ```powershell
+  python -m pytest
+  ```
+* **Chạy chi tiết cho một tệp kiểm thử cụ thể (ví dụ: test_rag_service.py):**
+  ```powershell
+  python -m pytest tests/test_rag_service.py -v
+  ```
+
+### 5. Luồng Vá Sửa Lỗi OCR Cho Dữ Liệu Cũ (Database Migration Patch)
+Để sửa nhanh các lỗi nhận dạng OCR (chữ `u` nhầm thành `v` như *Ngữ uăn 10*) trực tiếp trong các chunk dữ liệu cũ đã có sẵn trong MongoDB mà không cần xoá đi nạp lại từ đầu:
+
+* **Quét và xem trước các thay đổi sẽ sửa (Chế độ Dry Run - An toàn):**
+  ```powershell
+  python scripts/fix_ocr_chunks.py --dry-run
+  ```
+* **Thực thi cập nhật và lưu thay đổi trực tiếp vào database:**
+  ```powershell
+  python scripts/fix_ocr_chunks.py
+  ```
+
 ---
 
 ## III. Hướng Dẫn Kiểm Tra Dữ Liệu Trong MongoDB

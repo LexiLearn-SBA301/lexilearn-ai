@@ -263,6 +263,9 @@ class PDFReader:
                 # OCR outputs raw unicode text, no TCVN3 encoding needed
                 self.current_page_is_tcvn3 = False
                 
+                # Apply Vietnamese-specific OCR error corrections
+                page_text = self._fix_ocr_vietnamese(page_text)
+                
                 parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
                 elements.extend(parsed_elements)
             except Exception as page_err:
@@ -339,11 +342,83 @@ class PDFReader:
         """
         joined_text = " ".join(lines)
         return ExtractedElement(
+
             page=page_num,
             type="paragraph",
             raw_text=self._clean_text(joined_text),
             source_file=source_file
         )
+
+    # Vietnamese syllables starting with 'v' that Tesseract commonly misreads as 'u'.
+    # Sorted longest-first to prevent partial matches.
+    _OCR_V_SYLLABLES = [
+        # 5+ chars
+        'vương', 'viếng', 'vượng', 'vướng', 'vượt',
+        # 4 chars
+        'viết', 'việt', 'việc', 'viện', 'viên',
+        'vọng', 'vong',
+        'vùng', 'vừng', 'vũng',
+        'văn', 'vần', 'vẫn', 'vấn', 'vắn',
+        'vật', 'vạt', 'vặt', 'vặn', 'vắt',
+        'vốn', 'vốt', 'vồn',
+        'vàng', 'váng', 'vảng', 'vạng', 'vang',
+        'vạn', 'ván', 'van',
+        'vào',
+        'với',
+        'vai', 'vải', 'vái',
+        'vẫy', 'vây', 'vấp', 'vay',
+        'vui', 'vun', 'vụn', 'vụt', 'vút', 'vốc',
+        # 3 chars
+        'về', 'vế',
+        'và',
+        'vì',
+        'vợ',
+        'vẻ', 'vẹn', 'vẽ',
+        'vĩ', 'vị',
+        'vó', 'vỏ',
+        'vở', 'vỡ',
+        'vực',
+    ]
+
+    # Pre-compiled regex patterns for OCR correction (built once at class level)
+    _VIET_ALPHA = r'a-zA-ZàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ'
+    _ocr_correction_patterns: Optional[List[tuple]] = None
+
+    @classmethod
+    def _get_ocr_patterns(cls) -> List[tuple]:
+        """Lazily compile OCR correction regex patterns."""
+        if cls._ocr_correction_patterns is None:
+            cls._ocr_correction_patterns = []
+            for syllable in cls._OCR_V_SYLLABLES:
+                wrong_lower = 'u' + syllable[1:]
+                wrong_upper = 'U' + syllable[1:]
+                correct_upper = 'V' + syllable[1:]
+                # Negative lookbehind/lookahead for Vietnamese alphabetic chars
+                # ensures we only match at syllable boundaries
+                lb = rf'(?<![{cls._VIET_ALPHA}])'
+                la = rf'(?![{cls._VIET_ALPHA}])'
+                cls._ocr_correction_patterns.append((
+                    re.compile(lb + re.escape(wrong_lower) + la),
+                    syllable
+                ))
+                cls._ocr_correction_patterns.append((
+                    re.compile(lb + re.escape(wrong_upper) + la),
+                    correct_upper
+                ))
+        return cls._ocr_correction_patterns
+
+    def _fix_ocr_vietnamese(self, text: str) -> str:
+        """
+        Fixes common Tesseract OCR misrecognitions for Vietnamese text.
+        Primary fix: 'v' misread as 'u' (e.g. 'uăn' -> 'văn').
+        Uses word-boundary-aware regex to avoid false positives.
+        """
+        if not text:
+            return text
+        patterns = self._get_ocr_patterns()
+        for pattern, replacement in patterns:
+            text = pattern.sub(replacement, text)
+        return text
 
     def _tcvn3_to_unicode(self, text: str, force: bool = False) -> str:
         """
