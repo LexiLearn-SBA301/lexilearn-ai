@@ -297,11 +297,15 @@ class PDFReader:
                     elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
                     current_para_lines = []
                 
+                heading_text = cleaned
+                if cleaned.lower().startswith("đọc thêm") or cleaned.lower().startswith("0ọc thêm"):
+                    heading_text = self._clean_doc_them_heading(cleaned)
+                
                 elements.append(
                     ExtractedElement(
                         page=page_num,
                         type="heading",
-                        raw_text=cleaned,
+                        raw_text=heading_text,
                         source_file=source_file
                     )
                 )
@@ -429,7 +433,18 @@ class PDFReader:
         text = self._tcvn3_to_unicode(text, force=force_tcvn3)
         normalized = unicodedata.normalize("NFC", text)
         collapsed_spaces = re.sub(r'[ \t\r\f\v]+', ' ', normalized)
-        return collapsed_spaces.strip()
+        
+        # Replace OCR typo '0ọc'/'0ỌC' -> 'đọc'/'ĐỌC'
+        def replace_0oc(match):
+            m = match.group(0)
+            if m == '0ỌC':
+                return 'ĐỌC'
+            elif m == '0ọc':
+                return 'đọc'
+            return 'Đọc'
+            
+        cleaned = re.sub(r'\b0ọc\b', replace_0oc, collapsed_spaces, flags=re.IGNORECASE)
+        return cleaned.strip()
 
     def _is_in_bbox(self, char: dict, bbox: tuple) -> bool:
         """
@@ -476,21 +491,23 @@ class PDFReader:
 
         lower_line = line.lower()
         for kw in self.heading_keywords:
-            if lower_line.startswith(kw + " ") or lower_line == kw:
-                if kw in {"văn bản", "bài", "chương", "phần"}:
-                    after_kw = lower_line[len(kw):].strip()
-                    if not after_kw:
-                        return True
-                    if after_kw.startswith(":") or after_kw.startswith("-"):
-                        return True
-                    words = after_kw.split()
-                    first_word = words[0].rstrip(".:-") if words else ""
-                    if (first_word.isdigit() or 
-                        re.match(r'^[ivxlcdm]+$', first_word) or
-                        first_word in {"học", "đọc", "tập", "trích", "thành", "phụ", "số"}):
-                        return True
-                    return False
-                return True
+            if lower_line.startswith(kw):
+                after_kw = lower_line[len(kw):]
+                if not after_kw or not after_kw[0].isalnum():
+                    if kw in {"văn bản", "bài", "chương", "phần"}:
+                        after_kw_stripped = after_kw.strip()
+                        if not after_kw_stripped:
+                            return True
+                        if after_kw_stripped.startswith(":") or after_kw_stripped.startswith("-"):
+                            return True
+                        words = after_kw_stripped.split()
+                        first_word = words[0].rstrip(".:-") if words else ""
+                        if (first_word.isdigit() or 
+                            re.match(r'^[ivxlcdm]+$', first_word) or
+                            first_word in {"học", "đọc", "tập", "trích", "thành", "phụ", "số"}):
+                            return True
+                        return False
+                    return True
 
         return False
 
@@ -502,3 +519,36 @@ class PDFReader:
             return False
         
         return bool(re.match(r'^([•\-\*\+\–\—]|\d+[\)\.]|[a-zA-Z][\)\.])\s+', line))
+
+    def _clean_doc_them_heading(self, line: str) -> str:
+        """
+        Normalizes and formats reading selection headings (Đọc thêm).
+        Isolates Level 0 titles in 100% uppercase and corrects common OCR errors.
+        """
+        cleaned = re.sub(r'^[0oO]ọc\s+thêm', 'ĐỌC THÊM', line, flags=re.IGNORECASE)
+        cleaned = re.sub(r'^đọc\s+thêm', 'ĐỌC THÊM', cleaned, flags=re.IGNORECASE)
+        
+        if not cleaned.startswith('ĐỌC THÊM'):
+            return line
+            
+        # Strip parenthetical expressions, e.g. (Trích ...)
+        cleaned = re.sub(r'\s*\([^)]*\)', '', cleaned)
+        
+        # Clean up the separator after 'ĐỌC THÊM'
+        match = re.match(r'^ĐỌC THÊM[\s,:\-\—\–]*(.*)$', cleaned, flags=re.IGNORECASE)
+        if match:
+            title_part = match.group(1).strip()
+            # Clean up trailing noise
+            title_part = re.sub(r'[\s\)\-\—\–]+$', '', title_part)
+            title_part = re.sub(r'\bLm\b', '', title_part).strip()
+            title_part = title_part.strip(",.-:")
+            
+            # Specific correction for 'TIÊN DẶN' -> 'TIỄN DẶN'
+            title_part = re.sub(r'\bTIÊN\s+DẶN\b', 'TIỄN DẶN', title_part, flags=re.IGNORECASE)
+            
+            title_part = title_part.upper()
+            if title_part:
+                return f"ĐỌC THÊM: {title_part}"
+            else:
+                return "ĐỌC THÊM"
+        return cleaned

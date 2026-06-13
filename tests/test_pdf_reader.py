@@ -46,10 +46,30 @@ def test_heading_detection(reader):
     assert reader._is_heading("Chương II: Văn học trung đại") is True
     assert reader._is_heading("Ghi nhớ") is True
     
+    # Test new reading selection keywords (đọc thêm, 0ọc thêm)
+    assert reader._is_heading("Đọc thêm: Lời tiễn dặn") is True
+    assert reader._is_heading("0ọc thêm, Lời tiên dặn") is True
+    assert reader._is_heading("ĐỌC THÊM LỜI TIỄN DẶN") is True
     
     assert reader._is_heading("") is False
     assert reader._is_heading("Đây là một đoạn văn bình thường trong tác phẩm của Kim Lân và không phải tiêu đề.") is False
     assert reader._is_heading("12345") is False  
+
+def test_clean_doc_them_heading(reader):
+    """
+    Test standardizing and cleaning of 'đọc thêm' headings.
+    """
+    raw_heading = "0ọc THÊM, LỜI TIÊN DẶN Lm) (Trích Tiễn dặn người yêu — truyện thơ dân tộc Thái)"
+    cleaned = reader._clean_doc_them_heading(raw_heading)
+    assert cleaned == "ĐỌC THÊM: LỜI TIỄN DẶN"
+    
+    raw_heading_2 = "đọc thêm - XỐNG CHỤ XON XAO (Dân tộc Thái)"
+    cleaned_2 = reader._clean_doc_them_heading(raw_heading_2)
+    assert cleaned_2 == "ĐỌC THÊM: XỐNG CHỤ XON XAO"
+    
+    raw_heading_3 = "Đọc thêm: Lời tiễn dặn"
+    cleaned_3 = reader._clean_doc_them_heading(raw_heading_3)
+    assert cleaned_3 == "ĐỌC THÊM: LỜI TIỄN DẶN"
 
 def test_list_item_detection(reader):
     """
