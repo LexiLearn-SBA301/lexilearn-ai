@@ -26,6 +26,11 @@ def test_text_cleaning(reader):
     assert reader._clean_text("Nhµ xuÊt b¶n Gi¸o dôc") == "Nhà xuất bản Giáo dục"
     assert reader._clean_text("®−îc cuéc sèng cùc nhôc") == "được cuộc sống cực nhục"
     assert reader._clean_text("giμu chÊt th¬ vμ ®Ëm mμu") == "giàu chất thơ và đậm màu"
+    
+    # Test new OCR corrections
+    assert reader._clean_text("NBÔN NGỮ SINH H0ẠT") == "NGÔN NGỮ SINH HOẠT"
+    assert reader._clean_text("PHONG CÁCH NGÔN NGỨỮ SINH HOẠT") == "PHONG CÁCH NGÔN NGỮ SINH HOẠT"
+    assert reader._clean_text("nbôn ngữ sinh h0ạt") == "ngôn ngữ sinh hoạt"
 
 
 def test_heading_detection(reader):

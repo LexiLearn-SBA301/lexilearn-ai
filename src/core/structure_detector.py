@@ -29,7 +29,7 @@ class StructureDetector:
     """
 
     def __init__(self, config_path: Optional[str] = None) -> None:
-        self.roman_pattern = re.compile(r"^[IVXLCDM]+\.?\s+")
+        self.roman_pattern = re.compile(r"^[IVXLCDM]+(?:[\.\-\s]\s*|\s+)")
         self.numbered_pattern = re.compile(r"^\d+(\.\d+)*\.?\s+")
         self.letter_pattern = re.compile(r"^[a-z][\)\.]\s+")
 

@@ -443,8 +443,25 @@ class PDFReader:
                 return 'đọc'
             return 'Đọc'
             
-        cleaned = re.sub(r'\b0ọc\b', replace_0oc, collapsed_spaces, flags=re.IGNORECASE)
-        return cleaned.strip()
+        text_cleaned = re.sub(r'\b0ọc\b', replace_0oc, collapsed_spaces, flags=re.IGNORECASE)
+        
+        # Specific OCR and Vietnamese typography corrections:
+        # 1. '0' in middle of word misread as 'O'/'o' (specifically H0ạt -> Hoạt, H0ẠT -> HOẠT)
+        text_cleaned = re.sub(r'\bH0ẠT\b', 'HOẠT', text_cleaned)
+        text_cleaned = re.sub(r'\bh0ạt\b', 'hoạt', text_cleaned)
+        text_cleaned = re.sub(r'\bH0ạt\b', 'Hoạt', text_cleaned)
+        
+        # 2. 'NBôn' -> 'Ngôn' (OCR typo of NGÔN / ngôn)
+        text_cleaned = re.sub(r'\bNBÔN\b', 'NGÔN', text_cleaned)
+        text_cleaned = re.sub(r'\bnbôn\b', 'ngôn', text_cleaned)
+        text_cleaned = re.sub(r'\bNBôn\b', 'Ngôn', text_cleaned)
+        
+        # 3. 'Ngứữ' -> 'Ngữ' / 'ngứữ' -> 'ngữ' (Double hook typo in NGÔN NGỮ)
+        text_cleaned = re.sub(r'\bNGỨỮ\b', 'NGỮ', text_cleaned)
+        text_cleaned = re.sub(r'\bngứữ\b', 'ngữ', text_cleaned)
+        text_cleaned = re.sub(r'\bNgứữ\b', 'Ngữ', text_cleaned)
+        
+        return text_cleaned.strip()
 
     def _is_in_bbox(self, char: dict, bbox: tuple) -> bool:
         """

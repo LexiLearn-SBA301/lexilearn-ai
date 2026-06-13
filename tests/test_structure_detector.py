@@ -20,6 +20,8 @@ def test_is_roman_heading(detector):
     assert detector._is_roman_heading("I. TÁC GIẢ") is True
     assert detector._is_roman_heading("IV. TỔNG KẾT") is True
     assert detector._is_roman_heading("XII. PHẦN MỞ RỘNG") is True
+    assert detector._is_roman_heading("I- NGÔN NGỮ SINH HOẠT") is True
+    assert detector._is_roman_heading("I - NGÔN NGỮ SINH HOẠT") is True
     
     assert detector._is_roman_heading("i. tác giả") is False
     assert detector._is_roman_heading("a. tác giả") is False
