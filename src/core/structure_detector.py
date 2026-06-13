@@ -1,3 +1,4 @@
+import os
 import re
 import logging
 import unicodedata
@@ -27,10 +28,21 @@ class StructureDetector:
     from a flat list of ExtractedElements.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config_path: Optional[str] = None) -> None:
         self.roman_pattern = re.compile(r"^[IVXLCDM]+\.?\s+")
         self.numbered_pattern = re.compile(r"^\d+(\.\d+)*\.?\s+")
         self.letter_pattern = re.compile(r"^[a-z][\)\.]\s+")
+
+        # Load configuration
+        if not config_path:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "structure_detector_config.json"))
+        
+        import json
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            
+        self.generic_keywords = set(config["generic_keywords"])
 
     def _normalize_for_matching(self, text: str) -> str:
         if not text:
@@ -43,20 +55,21 @@ class StructureDetector:
         cleaned = re.sub(r'[^a-zA-Z0-9\s-]', ' ', stripped)
         return re.sub(r'\s+', ' ', cleaned).strip().lower()
 
+    def _is_garbage_heading(self, text: str) -> bool:
+        if not text:
+            return True
+        # Reject typical garbled symbols from OCR noise (e.g. ^, %, @, #, $, ~, |)
+        if re.search(r'[\^%@#$~|]', text):
+            return True
+        # If it contains almost no letters (excluding spaces/punctuation/digits)
+        letters = "".join(c for c in text if c.isalpha())
+        if len(letters) < 2:
+            return True
+        return False
+
     def _is_generic_section_heading(self, text: str) -> bool:
         normalized = self._normalize_for_matching(text)
-        
-        generic_keywords = {
-            "tieu dan", "van ban", "ghi nho", "huong dan hoc bai", 
-            "huong dan doc them", "huong dan tu hoc", "luyen tap", 
-            "tom tat", "tac gia", "tac pham", "doc hieu", "doc - hieu", 
-            "phan", "chuong", "bai", "muc luc", "loi noi dau", 
-            "tra bai lam van", "ket qua can dat", "on tap",
-            # OCR errors fallbacks
-            "huong dan huc bai", "huong dan hc bai", "huong dan hp bai", "huong dan duc them"
-        }
-        
-        for kw in generic_keywords:
+        for kw in self.generic_keywords:
             if normalized == kw or normalized.startswith(kw + " ") or normalized.startswith(kw + " -"):
                 return True
         return False
@@ -119,6 +132,9 @@ class StructureDetector:
         while i < n:
             el = elements[i]
             if el.type == "heading" and el.raw_text and el.raw_text.strip():
+                if self._is_garbage_heading(el.raw_text):
+                    i += 1
+                    continue
                 # Check if next elements are heading continuations on the same page
                 merged_text = el.raw_text.strip()
                 j = i + 1

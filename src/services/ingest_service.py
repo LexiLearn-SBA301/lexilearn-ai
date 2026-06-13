@@ -59,6 +59,15 @@ class IngestService:
         connect_to_mongo()
         self.db = get_database()
         self.jobs_collection = self.db["ingestion_jobs"]
+        
+        # Load known authors configuration
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "ingest_service_config.json"))
+        import json
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        self.known_authors = config["known_authors"]
+        
         logger.info("IngestService initialized successfully.")
 
     def start_ingestion(self, pdf_path_or_dir: str) -> str:
@@ -143,6 +152,25 @@ class IngestService:
             current = parent
             
         return current.title if current else chunk_title or "Sách Giáo Khoa"
+
+    def _clean_title_and_author(self, title: str) -> tuple[str, str]:
+        if not title:
+            return "", "Bộ Giáo Dục và Đào Tạo"
+            
+        upper_title = title.upper()
+        for raw_auth, clean_auth in self.known_authors.items():
+            pattern = rf"\s*[\s_\-\—\–:]+\s*{re.escape(raw_auth)}\s*$"
+            pattern_space = rf"\s+{re.escape(raw_auth)}\s*$"
+            
+            if re.search(pattern, upper_title):
+                cleaned_title = re.sub(pattern, "", title, flags=re.IGNORECASE).strip()
+                return cleaned_title, clean_auth
+            elif re.search(pattern_space, upper_title):
+                cleaned_title = re.sub(pattern_space, "", title, flags=re.IGNORECASE).strip()
+                return cleaned_title, clean_auth
+                
+        return title, "Bộ Giáo Dục và Đào Tạo"
+
 
     def _run_ingestion_sync(self, job_id: str, pdf_files: List[str]) -> None:
         """
@@ -242,13 +270,16 @@ class IngestService:
                             chunk_index=idx,
                             total_chunks=total_chunks
                         )
+                        resolved_title = self._resolve_work_title(
+                            chunk.section_title,
+                            chunk.page_start,
+                            sections
+                        )
+                        clean_title, resolved_author = self._clean_title_and_author(resolved_title)
+
                         metadata = ChunkMetadata(
-                            ten_tac_pham=self._resolve_work_title(
-                                chunk.section_title,
-                                chunk.page_start,
-                                sections
-                            ),
-                            tac_gia="Bộ Giáo Dục và Đào Tạo",
+                            ten_tac_pham=clean_title,
+                            tac_gia=resolved_author,
                             lop=file_metadata["lop"],
                             the_loai=chunk.content_type,
                             hoc_ki=file_metadata["hoc_ki"],

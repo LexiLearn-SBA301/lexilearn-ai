@@ -45,12 +45,6 @@ class PDFReader:
     and falls back to PyPDF2 if pdfplumber fails.
     """
 
-    HEADING_KEYWORDS = {
-        "chương", "bài", "phần", "ghi nhớ", "tiểu dẫn", 
-        "tác giả", "tác phẩm", "tóm tắt", "luyện tập", 
-        "đọc hiểu", "đọc - hiểu", "văn bản", "tri thức ngữ văn"
-    }
-
     def __init__(self) -> None:
         from dotenv import load_dotenv
         load_dotenv()
@@ -61,6 +55,10 @@ class PDFReader:
             pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         
         self.poppler_path: Optional[str] = os.getenv("POPPLER_PATH")
+        
+        # Load heading keywords from config
+        config = self._load_config()
+        self.heading_keywords = set(config["heading_keywords"])
 
     def read(self, file_path: str) -> List[ExtractedElement]:
         """
@@ -349,54 +347,37 @@ class PDFReader:
             source_file=source_file
         )
 
-    # Vietnamese syllables starting with 'v' that Tesseract commonly misreads as 'u'.
-    # Sorted longest-first to prevent partial matches.
-    _OCR_V_SYLLABLES = [
-        # 5+ chars
-        'vương', 'viếng', 'vượng', 'vướng', 'vượt',
-        # 4 chars
-        'viết', 'việt', 'việc', 'viện', 'viên',
-        'vọng', 'vong',
-        'vùng', 'vừng', 'vũng',
-        'văn', 'vần', 'vẫn', 'vấn', 'vắn',
-        'vật', 'vạt', 'vặt', 'vặn', 'vắt',
-        'vốn', 'vốt', 'vồn',
-        'vàng', 'váng', 'vảng', 'vạng', 'vang',
-        'vạn', 'ván', 'van',
-        'vào',
-        'với',
-        'vai', 'vải', 'vái',
-        'vẫy', 'vây', 'vấp', 'vay',
-        'vui', 'vun', 'vụn', 'vụt', 'vút', 'vốc',
-        # 3 chars
-        'về', 'vế',
-        'và',
-        'vì',
-        'vợ',
-        'vẻ', 'vẹn', 'vẽ',
-        'vĩ', 'vị',
-        'vó', 'vỏ',
-        'vở', 'vỡ',
-        'vực',
-    ]
-
-    # Pre-compiled regex patterns for OCR correction (built once at class level)
-    _VIET_ALPHA = r'a-zA-ZàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ'
+    _config: Optional[dict] = None
     _ocr_correction_patterns: Optional[List[tuple]] = None
+
+    @classmethod
+    def _load_config(cls) -> dict:
+        """Lazily load configuration from pdf_reader_config.json."""
+        if cls._config is None:
+            import json
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "pdf_reader_config.json"))
+            with open(config_path, "r", encoding="utf-8") as f:
+                cls._config = json.load(f)
+        return cls._config
 
     @classmethod
     def _get_ocr_patterns(cls) -> List[tuple]:
         """Lazily compile OCR correction regex patterns."""
         if cls._ocr_correction_patterns is None:
             cls._ocr_correction_patterns = []
-            for syllable in cls._OCR_V_SYLLABLES:
+            config = cls._load_config()
+            ocr_v_syllables = config["ocr_v_syllables"]
+            viet_alpha = config["viet_alpha"]
+            
+            for syllable in ocr_v_syllables:
                 wrong_lower = 'u' + syllable[1:]
                 wrong_upper = 'U' + syllable[1:]
                 correct_upper = 'V' + syllable[1:]
                 # Negative lookbehind/lookahead for Vietnamese alphabetic chars
                 # ensures we only match at syllable boundaries
-                lb = rf'(?<![{cls._VIET_ALPHA}])'
-                la = rf'(?![{cls._VIET_ALPHA}])'
+                lb = rf'(?<![{viet_alpha}])'
+                la = rf'(?![{viet_alpha}])'
                 cls._ocr_correction_patterns.append((
                     re.compile(lb + re.escape(wrong_lower) + la),
                     syllable
@@ -478,8 +459,13 @@ class PDFReader:
             return False
 
         has_letters = any(c.isalpha() for c in line)
-        if has_letters and line.isupper():
-            return True
+        if has_letters:
+            # Check if mostly uppercase (at least 75% of letters are uppercase)
+            # This handles OCR noise at the end of lines (e.g. "RA-MA BUỘC TỘI va v‹")
+            letters = [c for c in line if c.isalpha()]
+            upper_letters = [c for c in letters if c.isupper()]
+            if len(upper_letters) / len(letters) >= 0.75:
+                return True
 
         if re.match(r'^[IVXLCDM]+\.?\s+', line):
             return True
@@ -489,7 +475,7 @@ class PDFReader:
             return True
 
         lower_line = line.lower()
-        for kw in self.HEADING_KEYWORDS:
+        for kw in self.heading_keywords:
             if lower_line.startswith(kw + " ") or lower_line == kw:
                 if kw in {"văn bản", "bài", "chương", "phần"}:
                     after_kw = lower_line[len(kw):].strip()
