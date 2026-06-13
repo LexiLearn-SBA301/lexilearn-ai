@@ -25,6 +25,8 @@ try:
 except ImportError:
     convert_from_path = None
 
+from PIL import Image
+
 logger = logging.getLogger("rag-service.pdf-reader")
 
 import vietnamese
@@ -229,11 +231,11 @@ class PDFReader:
         
         logger.info(f"Converting '{source_file}' to images for OCR...")
         try:
-            # Convert PDF pages to PIL images
+            # Convert PDF pages to PIL images with high DPI for better font recognition
             if self.poppler_path:
-                images = convert_from_path(file_path, poppler_path=self.poppler_path)
+                images = convert_from_path(file_path, dpi=300, poppler_path=self.poppler_path)
             else:
-                images = convert_from_path(file_path)
+                images = convert_from_path(file_path, dpi=300)
         except Exception as e:
             raise RuntimeError(f"Failed to convert PDF to images (check poppler installation): {e}")
 
@@ -246,11 +248,12 @@ class PDFReader:
                 logger.info(f"OCR progress: page {page_num}/{total_pages}")
                 
             try:
-                # Preprocess: convert to grayscale
-                gray_image = image.convert('L')
+                # Preprocess: convert to grayscale (optimal for textbooks to preserve decorative letters)
+                preprocessed_image = self._preprocess_for_ocr(image, use_binarization=False)
                 
-                # Run Tesseract OCR for Vietnamese
-                raw_text = pytesseract.image_to_string(gray_image, lang='vie')
+                # Run Tesseract OCR for Vietnamese with optimized LSTM config and automatic layout
+                custom_config = r'--oem 1'
+                raw_text = pytesseract.image_to_string(preprocessed_image, lang='vie', config=custom_config)
                 if isinstance(raw_text, bytes):
                     page_text = raw_text.decode('utf-8')
                 elif isinstance(raw_text, str):
@@ -288,7 +291,7 @@ class PDFReader:
         current_para_lines: List[str] = []
 
         for line in lines:
-            cleaned = self._clean_text(line)
+            cleaned = self._clean_text(line, is_final=False)
             if not cleaned:
                 continue
 
@@ -353,6 +356,8 @@ class PDFReader:
 
     _config: Optional[dict] = None
     _ocr_correction_patterns: Optional[List[tuple]] = None
+    _ocr_corrections: Optional[dict] = None
+    _compiled_word_corrections: Optional[List[tuple]] = None
 
     @classmethod
     def _load_config(cls) -> dict:
@@ -392,6 +397,132 @@ class PDFReader:
                 ))
         return cls._ocr_correction_patterns
 
+    @classmethod
+    def _load_ocr_corrections(cls) -> dict:
+        """Lazily load OCR correction dictionary from JSON config."""
+        if cls._ocr_corrections is None:
+            import json
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            path = os.path.normpath(os.path.join(current_dir, "..", "config", "ocr_corrections.json"))
+            with open(path, "r", encoding="utf-8") as f:
+                cls._ocr_corrections = json.load(f)
+            
+            # Pre-compile case-insensitive word matching regex patterns
+            cls._compiled_word_corrections = []
+            config = cls._load_config()
+            viet_alpha = config["viet_alpha"]
+            
+            lb = rf'(?<![{viet_alpha}])'
+            la = rf'(?![{viet_alpha}])'
+            # Sort corrections by key length (longest first) to prevent
+            # shorter patterns from consuming characters needed by longer ones
+            # (e.g. "ghỉ" must not match before "nghỉ lễ thử lửa")
+            word_items = sorted(
+                cls._ocr_corrections["word_corrections"].items(),
+                key=lambda item: len(item[0]),
+                reverse=True
+            )
+            for wrong, correct in word_items:
+                pattern = re.compile(lb + re.escape(wrong) + la, re.IGNORECASE)
+                cls._compiled_word_corrections.append((pattern, wrong, correct))
+                
+        return cls._ocr_corrections
+
+    def _apply_ocr_corrections(self, text: str, is_final: bool = True, step: str = "all") -> str:
+        """Applies data-driven OCR corrections from config to avoid hardcoded regexes."""
+        if not text:
+            return ""
+            
+        corrections = self._load_ocr_corrections()
+        
+        if step in ("pre_tcvn3", "all"):
+            # 1. Immediate sentence-start or general character corrections for £ sign
+            # This has to happen before TCVN3 check.
+            if is_final:
+                text = re.sub(r'^£ơ\b', 'Thơ', text)
+                text = re.sub(r'(?<=\.\s)£ơ\b', 'Thơ', text)
+                text = re.sub(r'(?<=\n)£ơ\b', 'Thơ', text)
+                
+                text = re.sub(r'^£', 'T', text)
+                text = re.sub(r'(?<=\.\s)£', 'T', text)
+                text = re.sub(r'(?<=\n)£', 'T', text)
+                
+            # Apply standard character-level replacements
+            for wrong, correct in corrections["char_corrections"].items():
+                text = text.replace(wrong, correct)
+                
+        if step in ("post_tcvn3", "all"):
+            # Replace OCR typo '0ọc'/'0ỌC' -> 'đọc'/'ĐỌC' (dynamic case preservation)
+            def replace_0oc(match):
+                m = match.group(0)
+                if m == '0ỌC':
+                    return 'ĐỌC'
+                elif m == '0ọc':
+                    return 'đọc'
+                return 'Đọc'
+            text = re.sub(r'\b0ọc\b', replace_0oc, text, flags=re.IGNORECASE)
+
+            # 2. Case-aware word replacements from JSON
+            word_corrections = self._compiled_word_corrections or []
+            for pattern, wrong, correct in word_corrections:
+                def case_aware_replace(match, _correct=correct):
+                    original = match.group(0)
+                    if original.isupper():
+                        return _correct.upper()
+                    elif original and original[0].isupper():
+                        return _correct[0].upper() + _correct[1:]
+                    return _correct.lower()
+                text = pattern.sub(case_aware_replace, text)
+                
+            # 3. Final sentence-start capitalizations
+            if is_final:
+                for wrong, correct in corrections["sentence_start_corrections"].items():
+                    text = re.sub(r'^' + re.escape(wrong) + r'\b', correct, text)
+                    text = re.sub(r'(?<=\.\s)' + re.escape(wrong) + r'\b', correct, text)
+                    
+        return text
+
+    def _preprocess_for_ocr(self, pil_image, use_binarization: bool = False) -> "Image.Image":
+        """
+        Applies preprocessing to improve OCR accuracy on complex and decorative fonts.
+        For textbook PDFs, standard grayscale (use_binarization=False) works best to preserve
+        drop caps and avoid noisy background borders.
+        """
+        if not use_binarization:
+            return pil_image.convert('L')
+
+        try:
+            import cv2
+            import numpy as np
+            
+            # Convert PIL image to OpenCV numpy array
+            img = np.array(pil_image)
+            
+            # Convert RGB to Grayscale
+            if len(img.shape) == 3:
+                gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+            else:
+                gray = img
+                
+            # Light noise reduction using Gaussian Blur (preserves diacritics well)
+            denoised = cv2.GaussianBlur(gray, (3, 3), 0)
+            
+            # Binarize with Adaptive Thresholding to resolve faded/special fonts and uneven illumination
+            binary = cv2.adaptiveThreshold(
+                denoised, 
+                255, 
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                cv2.THRESH_BINARY, 
+                blockSize=31, 
+                C=10
+            )
+            
+            # Convert back to PIL Image
+            return Image.fromarray(binary)
+        except Exception as preprocess_err:
+            logger.warning(f"OpenCV preprocessing failed: {preprocess_err}. Falling back to standard grayscale.")
+            return pil_image.convert('L')
+
     def _fix_ocr_vietnamese(self, text: str) -> str:
         """
         Fixes common Tesseract OCR misrecognitions for Vietnamese text.
@@ -423,45 +554,27 @@ class PDFReader:
             return vietnamese.normalize(processed_text, target_charset="UNICODE", source_charset="TCVN3")
         return text
 
-    def _clean_text(self, text: str) -> str:
+    def _clean_text(self, text: str, is_final: bool = True) -> str:
         """
         Normalizes spaces and Unicode characters for Vietnamese text.
         """
         if not text:
             return ""
+        
+        # 1. Pre-TCVN3: Apply early character replacements (£ -> t/T) to prevent false positives in encoding detection
+        text = self._apply_ocr_corrections(text, is_final=is_final, step="pre_tcvn3")
+
+        # 2. Decode TCVN3 to Unicode and normalize
         force_tcvn3 = getattr(self, "current_page_is_tcvn3", False)
         text = self._tcvn3_to_unicode(text, force=force_tcvn3)
         normalized = unicodedata.normalize("NFC", text)
         collapsed_spaces = re.sub(r'[ \t\r\f\v]+', ' ', normalized)
         
-        # Replace OCR typo '0ọc'/'0ỌC' -> 'đọc'/'ĐỌC'
-        def replace_0oc(match):
-            m = match.group(0)
-            if m == '0ỌC':
-                return 'ĐỌC'
-            elif m == '0ọc':
-                return 'đọc'
-            return 'Đọc'
-            
-        text_cleaned = re.sub(r'\b0ọc\b', replace_0oc, collapsed_spaces, flags=re.IGNORECASE)
-        
-        # Specific OCR and Vietnamese typography corrections:
-        # 1. '0' in middle of word misread as 'O'/'o' (specifically H0ạt -> Hoạt, H0ẠT -> HOẠT)
-        text_cleaned = re.sub(r'\bH0ẠT\b', 'HOẠT', text_cleaned)
-        text_cleaned = re.sub(r'\bh0ạt\b', 'hoạt', text_cleaned)
-        text_cleaned = re.sub(r'\bH0ạt\b', 'Hoạt', text_cleaned)
-        
-        # 2. 'NBôn' -> 'Ngôn' (OCR typo of NGÔN / ngôn)
-        text_cleaned = re.sub(r'\bNBÔN\b', 'NGÔN', text_cleaned)
-        text_cleaned = re.sub(r'\bnbôn\b', 'ngôn', text_cleaned)
-        text_cleaned = re.sub(r'\bNBôn\b', 'Ngôn', text_cleaned)
-        
-        # 3. 'Ngứữ' -> 'Ngữ' / 'ngứữ' -> 'ngữ' (Double hook typo in NGÔN NGỮ)
-        text_cleaned = re.sub(r'\bNGỨỮ\b', 'NGỮ', text_cleaned)
-        text_cleaned = re.sub(r'\bngứữ\b', 'ngữ', text_cleaned)
-        text_cleaned = re.sub(r'\bNgứữ\b', 'Ngữ', text_cleaned)
+        # 3. Post-TCVN3: Apply word-level corrections and final sentence-start formatting
+        text_cleaned = self._apply_ocr_corrections(collapsed_spaces, is_final=is_final, step="post_tcvn3")
         
         return text_cleaned.strip()
+
 
     def _is_in_bbox(self, char: dict, bbox: tuple) -> bool:
         """

@@ -32,6 +32,42 @@ def test_text_cleaning(reader):
     assert reader._clean_text("PHONG CÁCH NGÔN NGỨỮ SINH HOẠT") == "PHONG CÁCH NGÔN NGỮ SINH HOẠT"
     assert reader._clean_text("nbôn ngữ sinh h0ạt") == "ngôn ngữ sinh hoạt"
 
+    # Test drop cap corrections with is_final flag
+    assert reader._clean_text("húng ta đã bước vào", is_final=False) == "chúng ta đã bước vào"
+    assert reader._clean_text("húng ta đã bước vào", is_final=True) == "Chúng ta đã bước vào"
+    assert reader._clean_text("ở đây húng ta có", is_final=True) == "ở đây chúng ta có"
+    assert reader._clean_text("ở đây húng ta có", is_final=False) == "ở đây chúng ta có"
+    assert reader._clean_text("cuối câu. húng ta lại", is_final=True) == "cuối câu. Chúng ta lại"
+
+    # Test £, ghỉ and nghỉ OCR corrections
+    assert reader._clean_text("£ự mình chiếm lĩnh", is_final=False) == "tự mình chiếm lĩnh"
+    assert reader._clean_text("£ự mình chiếm lĩnh", is_final=True) == "Tự mình chiếm lĩnh"
+    assert reader._clean_text("£ơ (thơ Nôm)", is_final=False) == "thơ (thơ Nôm)"
+    assert reader._clean_text("bầy cà £ongt)") == "bầy cà tongt)"
+    assert reader._clean_text("£ự", is_final=True) == "Tự"
+    assert reader._clean_text("Ghỉ nhớ") == "Ghi nhớ"
+    assert reader._clean_text("mục ghỉ nhớ ở cuối bài") == "mục ghi nhớ ở cuối bài"
+    assert reader._clean_text("tuy lòng thiếp rất đa nghỉ") == "tuy lòng thiếp rất đa nghi"
+    assert reader._clean_text("tiến hành nghỉ thức") == "tiến hành nghi thức"
+    assert reader._clean_text("nghỉ lễ thử lửa") == "nghi lễ thử lửa"
+    assert reader._clean_text("nghỉ lễ chào đón") == "nghi lễ chào đón"
+    # Ensure standard nghỉ (to rest) is not modified
+    assert reader._clean_text("quyết định nghỉ học") == "quyết định nghỉ học"
+    assert reader._clean_text("về nghỉ hưu") == "về nghỉ hưu"
+
+    # Test page 6 OCR corrections
+    assert reader._clean_text("TỔỒNG QUAN VĂN HỌC") == "TỔNG QUAN VĂN HỌC"
+    assert reader._clean_text("Văn học tân gian") == "Văn học dân gian"
+    assert reader._clean_text("KẾT QUÁ CÂN ĐẠT") == "KẾT QUẢ CẦN ĐẠT"
+    assert reader._clean_text("năng lực sáng tạo tỉnh thần") == "năng lực sáng tạo tinh thần"
+    assert reader._clean_text("hụp thành") == "hợp thành"
+    assert reader._clean_text("pủa văn học") == "của văn học"
+    assert reader._clean_text("văn hc Việt Nam") == "văn học Việt Nam"
+    assert reader._clean_text("Hiếu được") == "Hiểu được"
+
+
+
+
 
 def test_heading_detection(reader):
     """

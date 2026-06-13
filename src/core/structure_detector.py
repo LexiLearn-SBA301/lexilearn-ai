@@ -87,6 +87,12 @@ class StructureDetector:
         text = text.strip()
         if not text:
             return False
+            
+        # Reject publisher/institutional names from being main titles (Level 0)
+        lower_text = text.lower()
+        if "nhà xuất bản" in lower_text or "bộ giáo dục" in lower_text:
+            return False
+            
         if (
             len(text) <= 80
             and text.isupper()

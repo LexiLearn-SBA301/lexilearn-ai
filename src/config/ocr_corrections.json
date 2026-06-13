@@ -1,0 +1,38 @@
+{
+  "word_corrections": {
+    "húng ta": "chúng ta",
+    "húng tôi": "chúng tôi",
+    "húng nó": "chúng nó",
+    "tân gian": "dân gian",
+    "tỉnh thần": "tinh thần",
+    "hụp thành": "hợp thành",
+    "pủa": "của",
+    "văn hc": "văn học",
+    "hiếu được": "hiểu được",
+    "tổồng": "tổng",
+    "nbôn": "ngôn",
+    "ngứữ": "ngữ",
+    "h0ạt": "hoạt",
+    "ghỉ": "ghi",
+    "đa nghỉ": "đa nghi",
+    "nghỉ thức": "nghi thức",
+    "nghỉ lễ thử lửa": "nghi lễ thử lửa",
+    "nghỉ lễ chào đón": "nghi lễ chào đón",
+    "kết quá cân đạt": "kết quả cần đạt",
+    "kết quá": "kết quả",
+    "cân đạt": "cần đạt",
+    "cúa": "của",
+    "tống quan": "tổng quan",
+    "dác": "các"
+  },
+  "char_corrections": {
+    "£ơ": "thơ",
+    "£Ơ": "THƠ",
+    "£": "t"
+  },
+  "sentence_start_corrections": {
+    "chúng ta": "Chúng ta",
+    "chúng tôi": "Chúng tôi",
+    "chúng nó": "Chúng nó"
+  }
+}
