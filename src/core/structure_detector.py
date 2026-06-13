@@ -112,6 +112,50 @@ class StructureDetector:
         if not elements:
             return []
 
+        # Pre-process: merge consecutive heading elements that represent a single split heading
+        processed_elements = []
+        i = 0
+        n = len(elements)
+        while i < n:
+            el = elements[i]
+            if el.type == "heading" and el.raw_text and el.raw_text.strip():
+                # Check if next elements are heading continuations on the same page
+                merged_text = el.raw_text.strip()
+                j = i + 1
+                while j < n:
+                    next_el = elements[j]
+                    if not next_el.raw_text or not next_el.raw_text.strip():
+                        j += 1
+                        continue
+                    
+                    if next_el.type == "heading" and next_el.page == el.page:
+                        next_stripped = next_el.raw_text.strip()
+                        is_continuation = not (
+                            self._is_roman_heading(next_stripped)
+                            or self._is_numbered_heading(next_stripped)
+                            or self._is_letter_heading(next_stripped)
+                            or self._is_generic_section_heading(next_stripped)
+                        )
+                        if is_continuation:
+                            merged_text += " " + next_stripped
+                            j += 1
+                            continue
+                    break
+                
+                if j > i + 1:
+                    el = ExtractedElement(
+                        page=el.page,
+                        type="heading",
+                        raw_text=merged_text,
+                        source_file=el.source_file
+                    )
+                    i = j - 1
+            
+            processed_elements.append(el)
+            i += 1
+        
+        elements = processed_elements
+
         sections: List[DocumentSection] = []
         section_stack: List[DocumentSection] = []
 

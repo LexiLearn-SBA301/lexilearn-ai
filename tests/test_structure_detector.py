@@ -195,3 +195,30 @@ def test_detect_full_hierarchy(detector):
     assert sections[5].page_start == 13
     assert sections[5].page_end == 14
     assert sections[5].content == ["Năm 1945 đói khủng khiếp..."]
+
+
+def test_detect_split_headings(detector):
+    """
+    Test that consecutive heading elements representing a single split heading are merged correctly.
+    """
+    elements = [
+        ExtractedElement(page=40, type="heading", raw_text="TRUYỆN AN DƯƠNG VƯƠNG", source_file="test.pdf"),
+        ExtractedElement(page=40, type="heading", raw_text="VÀ MỊ CHÂU - TRỌNG THỦY", source_file="test.pdf"),
+        ExtractedElement(page=40, type="paragraph", raw_text="(Truyền thuyết)", source_file="test.pdf"),
+        ExtractedElement(page=40, type="heading", raw_text="KẾT QUẢ CẦN ĐẠT", source_file="test.pdf"),
+        ExtractedElement(page=40, type="heading", raw_text="TIỂU DẪN", source_file="test.pdf"),
+    ]
+    sections = detector.detect(elements)
+    
+    assert len(sections) == 3
+    assert sections[0].title == "TRUYỆN AN DƯƠNG VƯƠNG VÀ MỊ CHÂU - TRỌNG THỦY"
+    assert sections[0].level == 0
+    assert sections[0].content == ["(Truyền thuyết)"]
+    
+    assert sections[1].title == "KẾT QUẢ CẦN ĐẠT"
+    assert sections[1].level == 1
+    assert sections[1].parent_title == "TRUYỆN AN DƯƠNG VƯƠNG VÀ MỊ CHÂU - TRỌNG THỦY"
+    
+    assert sections[2].title == "TIỂU DẪN"
+    assert sections[2].level == 1
+    assert sections[2].parent_title == "TRUYỆN AN DƯƠNG VƯƠNG VÀ MỊ CHÂU - TRỌNG THỦY"
