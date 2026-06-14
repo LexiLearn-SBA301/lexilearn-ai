@@ -11,7 +11,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from providers.ollama_provider import ollama_provider, OLLAMA_LLM_MODEL
+from providers.ollama_provider import ollama_provider, FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
 
 logger = logging.getLogger("rag-service.api.chat")
 
@@ -21,7 +21,6 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     message: str
     system: Optional[str] = None   # system prompt tùy chọn (mặc định không có)
-
 
 class ChatResponse(BaseModel):
     answer: str
@@ -43,16 +42,27 @@ def _extract_text(content: Any) -> str:
     return str(content).strip()
 
 
-@router.post("/only-llm", response_model=ChatResponse)
-def chat(req: ChatRequest) -> ChatResponse:
-    """Gửi 1 câu tới LLM fine-tune và nhận câu trả lời (không truy hồi tài liệu)."""
-    llm = ollama_provider.get_llm()
+def _run_chat(req: ChatRequest, model: str) -> ChatResponse:
+    """Dựng messages -> gọi LLM `model` -> trả lời. Dùng chung cho các endpoint chat."""
+    llm = ollama_provider.get_llm(model)
 
     messages: List[Any] = []
     if req.system:
         messages.append(SystemMessage(content=req.system))
     messages.append(HumanMessage(content=req.message))
 
-    logger.info("Chat request (%d ký tự) -> model %s", len(req.message), OLLAMA_LLM_MODEL)
+    logger.info("Chat request (%d ký tự) -> model %s", len(req.message), model)
     response = llm.invoke(messages)
-    return ChatResponse(answer=_extract_text(response.content), model=OLLAMA_LLM_MODEL)
+    return ChatResponse(answer=_extract_text(response.content), model=model)
+
+
+@router.post("/only-llm", response_model=ChatResponse)
+def chat_finetuned(req: ChatRequest) -> ChatResponse:
+    """Chat với model FINE-TUNE (không RAG)."""
+    return _run_chat(req, FINE_TUNED_OLLAMA_LLM_MODEL)
+
+
+@router.post("/base-llm", response_model=ChatResponse)
+def chat_base(req: ChatRequest) -> ChatResponse:
+    """Chat với model GỐC (chưa fine-tune) để so sánh. Cần đã pull base model trước."""
+    return _run_chat(req, OLLAMA_BASE_LLM_MODEL)

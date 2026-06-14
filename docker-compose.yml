@@ -60,6 +60,23 @@ services:
       - "ollama pull bge-m3 && ollama pull hf.co/Tobi2904/qwen-finetuned-gguf"
     restart: "no"
 
+  # (Tùy chọn) Pull model GỐC qwen2.5:3b để so sánh với bản fine-tune.
+  # Mặc định KHÔNG chạy -> đồng đội không bị tải thêm 1.9GB. Bật khi cần so sánh:
+  #   docker compose --profile compare up -d
+  ollama-pull-base:
+    image: ollama/ollama:latest
+    container_name: rag-ollama-pull-base
+    profiles: ["compare"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "ollama pull qwen2.5:3b"
+    restart: "no"
+
   app:
     build: .
     container_name: rag-app
@@ -83,8 +100,9 @@ services:
     environment:
       MONGODB_URI: "mongodb://mongo:27017/rag_db"
       OLLAMA_URL: "http://ollama:11434"
-      OLLAMA_LLM_MODEL: "hf.co/Tobi2904/qwen-finetuned-gguf:latest"
+      FINE_TUNED_OLLAMA_LLM_MODEL: "hf.co/Tobi2904/qwen-finetuned-gguf:latest"
       OLLAMA_EMBED_MODEL: "bge-m3"
+      OLLAMA_BASE_LLM_MODEL: "qwen2.5:3b"   # cho endpoint /chat/base-llm (cần pull base)
     volumes:
       # PDF để ingest (mount read-only, không nhồi vào image).
       - ./docs:/app/docs:ro
@@ -97,3 +115,8 @@ services:
 volumes:
   mongo-data:
   ollama-data:
+
+# lệnh pull 2 model
+#docker compose --profile compare up -d --build.
+# lệnh chỉ pull 1 model fine-tune
+# docker compose up -d --build 
