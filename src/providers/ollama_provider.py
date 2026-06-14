@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
+
 logger = logging.getLogger("rag-service.ollama")
 logging.basicConfig(level=logging.INFO)
 
@@ -10,7 +11,12 @@ load_dotenv()
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
+# Model fine-tune (GGUF) được host trên HuggingFace. Đồng đội chạy 1 lần:
+#   ollama run hf.co/Tobi2904/qwen-finetuned-gguf
+# rồi đặt OLLAMA_LLM_MODEL=hf.co/Tobi2904/qwen-finetuned-gguf:latest trong .env.
+# Provider chỉ gọi Ollama server qua HTTP — KHÔNG nạp adapter PEFT trực tiếp.
 OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:3b")
+
 
 class OllamaProvider:
     def __init__(self):

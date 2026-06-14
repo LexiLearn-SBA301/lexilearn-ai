@@ -174,52 +174,29 @@ class Embedder:
 
     def _detect_device(self) -> str:
         """
-        Auto-detect the best available compute device.
-        Priority order is defined in config: cuda > mps > cpu.
+        Embeddings được phục vụ bởi Ollama (qua HTTP) nên KHÔNG cần dò GPU local,
+        cũng không cần torch trong app image.
         """
-        try:
-            import torch
-        except ImportError:
-            logger.warning("torch not installed, defaulting to CPU")
-            return "cpu"
-
-        device_checkers = {
-            "cuda": torch.cuda.is_available,
-            "mps": lambda: (
-                hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
-            ),
-            "cpu": lambda: True,
-        }
-
-        for device in self._device_priority:
-            checker = device_checkers.get(device)
-            if checker and checker():
-                logger.info("Device selected: %s", device)
-                return device
-
-        logger.warning("No preferred device available, falling back to CPU")
-        return "cpu"
+        return "ollama"
 
     def _load_model(self):
         """
-        Load the HuggingFaceEmbeddings model via LangChain.
+        Trả về embeddings backend là OllamaEmbeddings (bge-m3 chạy trong Ollama).
+
+        Trước đây nạp BAAI/bge-m3 in-process bằng torch + sentence-transformers
+        (image ~3GB). Nay gọi qua Ollama giống ChatOllama -> app nhẹ, bge-m3 chỉ tải
+        1 lần vào volume của Ollama. Cùng model bge-m3 (dim 1024) nên vector tương
+        thích với phần còn lại của pipeline.
+
+        Tên model lấy từ env OLLAMA_EMBED_MODEL (mặc định 'bge-m3').
         """
-        from langchain_huggingface import HuggingFaceEmbeddings
+        from providers.ollama_provider import ollama_provider
 
-        logger.info("Loading model '%s' on device '%s' via LangChain...", self._model_name, self._device)
-
-        model = HuggingFaceEmbeddings(
-            model_name=self._model_name,
-            model_kwargs={"device": self._device},
-            encode_kwargs={
-                "normalize_embeddings": self._normalize,
-                "batch_size": self._batch_size,
-                "show_progress_bar": self._show_progress,
-            },
+        logger.info(
+            "Loading embeddings via Ollama (model=%s)",
+            os.getenv("OLLAMA_EMBED_MODEL", "bge-m3"),
         )
-
-        logger.info("Model loaded successfully via LangChain HuggingFaceEmbeddings")
-        return model
+        return ollama_provider.get_embeddings()
 
     @staticmethod
     def _validate_input(texts: List[str]) -> None:
