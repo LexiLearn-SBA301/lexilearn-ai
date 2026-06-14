@@ -1,0 +1,99 @@
+# docker-compose.yml — RAG Service: app (FastAPI) + ollama (LLM & embeddings) + mongo.
+#
+#   docker compose up -d --build
+#
+# Lần đầu, service "ollama-init" tự pull bge-m3 + LLM fine-tune (~3GB, mất vài phút).
+# App sẽ chờ pull xong mới khởi động. Sau khi up, nạp dữ liệu 1 lần:
+#   docker compose exec app python main.py --ingest
+# Test truy vấn:
+#   docker compose exec app python main.py --query "Phân tích bài thơ..."
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: rag-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    # GPU (tùy chọn): bỏ comment nếu máy có NVIDIA + nvidia-container-toolkit.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Pull sẵn model vào Ollama (chạy 1 lần rồi thoát).
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: rag-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "ollama pull bge-m3 && ollama pull hf.co/Tobi2904/qwen-finetuned-gguf"
+    restart: "no"
+
+  app:
+    build: .
+    container_name: rag-app
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    # Secret / API key (vd OPENAI_API_KEY) đặt trong .env trên host -> KHÔNG lên git,
+    # KHÔNG vào image. required:false: thiếu file .env cũng chạy được (chưa có key thì thôi).
+    env_file:
+      - path: .env
+        required: false
+    # Config hạ tầng + model: commit lên git, và GHI ĐÈ env_file nếu trùng key
+    # (nên giá trị localhost lỡ có trong .env cũng không phá Docker).
+    environment:
+      MONGODB_URI: "mongodb://mongo:27017/rag_db"
+      OLLAMA_URL: "http://ollama:11434"
+      OLLAMA_LLM_MODEL: "hf.co/Tobi2904/qwen-finetuned-gguf:latest"
+      OLLAMA_EMBED_MODEL: "bge-m3"
+    volumes:
+      # PDF để ingest (mount read-only, không nhồi vào image).
+      - ./docs:/app/docs:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo-data:
+  ollama-data:
