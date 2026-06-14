@@ -33,20 +33,22 @@ MODEL_NAME = "unsloth/Qwen2.5-3B-Instruct"   # bản Unsloth tối ưu sẵn cho
 # --- Đường dẫn data (SỬA cho khớp nơi bạn upload) ---
 DATA_PATH  = "/kaggle/input/test-s0/train.jsonl"   # tập huấn luyện (bắt buộc)
 DEV_PATH   = "/kaggle/input/test-s0/dev.jsonl"     # tập kiểm định (chỉ dùng nếu USE_EVAL=True)
-OUTPUT_DIR = "/kaggle/working/qwen2.5-3b-s0-lora"  # nơi lưu adapter
+OUTPUT_DIR  = "/kaggle/working/qwen2.5-3b-s0-ckpt"   # trainer ghi CHECKPOINT ở đây (để resume nếu crash)
+ADAPTER_DIR = "/kaggle/working/qwen2.5-3b-s0-lora"   # adapter CUỐI/tốt nhất (sạch) -> tải về & nạp cho DPO
 
 # --- Siêu tham số (hyperparameters) ---
 MAX_SEQ_LEN = 2048    # độ dài tối đa 1 mẫu (token). S0 ngắn nên 2048 dư dùng.
 LORA_R      = 16      # "độ lớn" adapter; 16 an toàn cho 3B
 LORA_ALPHA  = 32      # quy tắc phổ biến: alpha = 2*r  -> học mạnh hơn alpha=r
-EPOCHS      = 3       # data nhỏ (300-500 mẫu) -> 2-3 epoch hợp lý
+EPOCHS      = 3       # ~1680 mẫu train -> 2-3 epoch hợp lý (nhìn eval_loss để chỉnh)
 LR          = 2e-4    # learning rate điển hình cho LoRA
 BATCH_SIZE  = 2       # số mẫu/bước; T4 chịu được
 GRAD_ACCUM  = 4       # batch hiệu dụng = BATCH_SIZE * GRAD_ACCUM = 8
 
 # --- Công tắc bật/tắt tính năng ---
 SMOKE_TEST  = True    # True = chạy thử ~50 bước để kiểm pipeline cho nhanh.
-                      # Pipeline OK rồi -> đặt False để train đủ EPOCHS.
+                      # Pipeline OK rồi -> đặt False, rồi CHẠY LẠI TỪ CELL 3
+                      # (nạp lại model sạch) để train đủ EPOCHS.
 USE_EVAL    = True    # True = dùng dev.jsonl để theo dõi overfit (cần DEV_PATH).
 EXPORT_GGUF = True    # True = xuất file .gguf + Modelfile để nạp vào Ollama.
 
@@ -138,6 +140,15 @@ sft_args = SFTConfig(
     per_device_eval_batch_size  = BATCH_SIZE,
     eval_strategy               = "steps" if eval_dataset is not None else "no",
     eval_steps                  = 25,
+    # --- checkpoint: cứ vài bước lưu 1 lần -> crash giữa chừng vẫn resume được ---
+    # SMOKE_TEST=True thì TẮT lưu (chạy thử, khỏi rác checkpoint); chạy thật mới bật.
+    save_strategy               = "no" if SMOKE_TEST else "steps",
+    save_steps                  = 25,     # = eval_steps (điều kiện để chọn model tốt nhất)
+    save_total_limit            = 3,      # chỉ giữ 3 checkpoint mới nhất -> đỡ đầy disk
+    # cuối train: tự nạp lại checkpoint có eval_loss THẤP NHẤT (chống overfit).
+    load_best_model_at_end      = (eval_dataset is not None) and (not SMOKE_TEST),
+    metric_for_best_model       = "eval_loss",
+    greater_is_better           = False,  # eval_loss càng thấp càng tốt
 )
 
 trainer = SFTTrainer(
@@ -155,12 +166,10 @@ trainer = train_on_responses_only(
     trainer,
     instruction_part = "<|im_start|>user\n", 
     # tắt chế độ tính loss (response_part chỉ bật chứ không biết tắt), cái tham số này hưu ích khi input vào trian 2 câu hội thoại 1 lúc 
-    """
-    system -> user -> assistant -> user -> assistant
-    """
     response_part    = "<|im_start|>assistant\n", 
     # đánh bỏ qua những token ở trước nó và bắt đầu bật công tắc tính loss
 )
+# system -> user -> assistant -> user -> assistant
 
 
 # ===================== CELL 5.5 — Kiểm chứng mask (nên chạy 1 lần) ===========
@@ -180,7 +189,18 @@ gpu = torch.cuda.get_device_properties(0)
 start_mem = round(torch.cuda.max_memory_reserved() / 1024**3, 2)
 print(f"GPU: {gpu.name} | VRAM tổng: {round(gpu.total_memory/1024**3, 2)} GB | đã dùng: {start_mem} GB")
 
-stats = trainer.train()
+# Tự dò checkpoint cũ trong OUTPUT_DIR: có -> train TIẾP, không -> train từ đầu.
+# Nhờ vậy nếu CELL này crash/ngắt giữa chừng, chạy lại là chạy tiếp, không mất công.
+# (Lưu ý: /kaggle/working bị xóa khi TẮT session. Muốn resume sang session KHÁC,
+#  phải Save Version, rồi add output làm Input và trỏ OUTPUT_DIR về thư mục đó.)
+from transformers.trainer_utils import get_last_checkpoint
+last_ckpt = get_last_checkpoint(OUTPUT_DIR) if os.path.isdir(OUTPUT_DIR) else None
+if last_ckpt:
+    print("Tìm thấy checkpoint -> train TIẾP từ:", last_ckpt)
+    stats = trainer.train(resume_from_checkpoint=last_ckpt)
+else:
+    print("Không có checkpoint -> train từ đầu.")
+    stats = trainer.train()
 
 used = round(torch.cuda.max_memory_reserved() / 1024**3, 2)
 print(stats)
@@ -190,9 +210,11 @@ print(f"VRAM đỉnh khi train: {used} GB")
 
 
 # ===================== CELL 7 — Lưu adapter =================================
-model.save_pretrained(OUTPUT_DIR)
-tokenizer.save_pretrained(OUTPUT_DIR)
-print("Đã lưu LoRA adapter tại:", OUTPUT_DIR)
+# load_best_model_at_end=True nên 'model' lúc này là bản eval_loss thấp nhất.
+# Lưu vào ADAPTER_DIR (sạch, KHÔNG lẫn checkpoint) -> tải về / nạp cho DPO sau này.
+model.save_pretrained(ADAPTER_DIR)
+tokenizer.save_pretrained(ADAPTER_DIR)
+print("Đã lưu LoRA adapter (bản tốt nhất) tại:", ADAPTER_DIR)
 
 # (Tùy chọn) Gộp adapter vào model nền thành bản 16bit độc lập:
 # model.save_pretrained_merged("/kaggle/working/qwen2.5-3b-s0-merged",
@@ -265,7 +287,7 @@ import shutil
 from IPython.display import FileLink
 
 # Nén thư mục adapter (nhẹ, vài MB) để tải nhanh.
-shutil.make_archive("/kaggle/working/lora_adapter", "zip", OUTPUT_DIR)
+shutil.make_archive("/kaggle/working/lora_adapter", "zip", ADAPTER_DIR)
 print("Tải LoRA adapter:")
 display(FileLink("/kaggle/working/lora_adapter.zip"))
 
