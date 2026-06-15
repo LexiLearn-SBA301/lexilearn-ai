@@ -57,7 +57,7 @@ services:
       OLLAMA_HOST: "http://ollama:11434"
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - "ollama pull bge-m3 && ollama pull hf.co/Tobi2904/qwen-finetuned-gguf"
+      - "ollama pull bge-m3 && ollama pull hf.co/Tobi2904/qwen-finetuned-dpo-gguf"
     restart: "no"
 
   # (Tùy chọn) Pull model GỐC qwen2.5:3b để so sánh với bản fine-tune.
@@ -100,7 +100,7 @@ services:
     environment:
       MONGODB_URI: "mongodb://mongo:27017/rag_db"
       OLLAMA_URL: "http://ollama:11434"
-      FINE_TUNED_OLLAMA_LLM_MODEL: "hf.co/Tobi2904/qwen-finetuned-gguf:latest"
+      FINE_TUNED_OLLAMA_LLM_MODEL: "hf.co/Tobi2904/qwen-finetuned-dpo-gguf:latest"
       OLLAMA_EMBED_MODEL: "bge-m3"
       OLLAMA_BASE_LLM_MODEL: "qwen2.5:3b"   # cho endpoint /chat/base-llm (cần pull base)
     volumes:
