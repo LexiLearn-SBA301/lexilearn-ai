@@ -211,25 +211,11 @@ class IngestService:
                     # 1. Read PDF
                     elements = reader.read(pdf_path)
                     if not elements:
-                        try:
-                            import pytesseract
-                            import pdf2image
-                            has_ocr_deps = True
-                        except ImportError:
-                            has_ocr_deps = False
-
-                        if not has_ocr_deps:
-                            raise ValueError(
-                                f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text). "
-                                "Không thể kích hoạt OCR dự phòng do thiếu thư viện 'pytesseract' hoặc 'pdf2image'. "
-                                "Vui lòng kiểm tra xem bạn đã kích hoạt môi trường ảo (.venv) chưa bằng cách chạy: "
-                                ".venv\\Scripts\\python main.py ..."
-                            )
-                        else:
-                            raise ValueError(
-                                f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và OCR dự phòng thất bại. "
-                                "Vui lòng kiểm tra lại đường dẫn cài đặt TESSERACT_CMD và POPPLER_PATH trong tệp .env."
-                            )
+                        deepdoc_path = os.getenv("DEEPDOC_PATH")
+                        raise ValueError(
+                            f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và OCR dự phòng thất bại. "
+                            f"Vui lòng kiểm tra cấu hình DEEPDOC_PATH trong tệp .env (hiện tại: {deepdoc_path})."
+                        )
                     
                     # 2. Detect Structure
                     sections = detector.detect(elements)

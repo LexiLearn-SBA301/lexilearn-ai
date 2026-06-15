@@ -15,17 +15,6 @@ try:
 except ImportError:
     PyPDF2 = None
 
-try:
-    import pytesseract
-except ImportError:
-    pytesseract = None
-
-try:
-    from pdf2image import convert_from_path
-except ImportError:
-    convert_from_path = None
-
-from PIL import Image
 
 logger = logging.getLogger("rag-service.pdf-reader")
 
@@ -51,21 +40,16 @@ class PDFReader:
         from dotenv import load_dotenv
         load_dotenv()
         
-        # Configure Tesseract and Poppler paths if provided
-        tesseract_cmd = os.getenv("TESSERACT_CMD")
-        if pytesseract and tesseract_cmd and os.path.exists(tesseract_cmd):
-            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-        
-        self.poppler_path: Optional[str] = os.getenv("POPPLER_PATH")
-        
         # Load heading keywords from config
         config = self._load_config()
         self.heading_keywords = set(config["heading_keywords"])
+        
+        self._deepdoc_ocr = None
 
     def read(self, file_path: str) -> List[ExtractedElement]:
         """
         Reads a PDF file and extracts a list of structured elements.
-        Falls back to PyPDF2 and Tesseract OCR if primary extraction fails or returns no content.
+        Falls back to PyPDF2 and DeepDoc + VietOCR if primary extraction fails or returns no content.
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PDF file not found at: {file_path}")
@@ -83,8 +67,8 @@ class PDFReader:
         if elements:
             return elements
 
-        # Tầng 3: Tesseract OCR (cho PDF quét ảnh)
-        elements = self._try_extract(self._extract_with_ocr, file_path, source_file, "Tesseract OCR")
+        # Tầng 3: DeepDoc + VietOCR (cho PDF quét ảnh)
+        elements = self._try_extract(self._extract_with_ocr, file_path, source_file, "DeepDoc + VietOCR")
         if elements:
             return elements
 
@@ -218,63 +202,53 @@ class PDFReader:
 
     def _extract_with_ocr(self, file_path: str, source_file: str) -> List[ExtractedElement]:
         """
-        Third fallback parser using Tesseract OCR for scanned image PDFs.
-        Converts PDF pages to images and runs OCR to extract text.
+        Third fallback parser using DeepDoc + VietOCR for scanned image PDFs.
+        Converts PDF pages to images using pdfplumber and runs OCR to extract text.
         """
-        if pytesseract is None or convert_from_path is None:
-            raise ImportError(
-                "OCR dependencies are not installed. "
-                "Please run: pip install pytesseract pdf2image"
+        import numpy as np
+
+        deepdoc_ocr = self._get_deepdoc_ocr()
+        if deepdoc_ocr is None:
+            deepdoc_root = os.getenv("DEEPDOC_PATH")
+            raise RuntimeError(
+                f"DeepDoc + VietOCR engine could not be initialized. "
+                f"Please check your DEEPDOC_PATH in .env (currently: '{deepdoc_root}')."
             )
 
         elements: List[ExtractedElement] = []
         
-        logger.info(f"Converting '{source_file}' to images for OCR...")
-        try:
-            # Convert PDF pages to PIL images with high DPI for better font recognition
-            if self.poppler_path:
-                images = convert_from_path(file_path, dpi=300, poppler_path=self.poppler_path)
-            else:
-                images = convert_from_path(file_path, dpi=300)
-        except Exception as e:
-            raise RuntimeError(f"Failed to convert PDF to images (check poppler installation): {e}")
-
-        total_pages = len(images)
-        logger.info(f"Starting OCR for {total_pages} pages in '{source_file}'...")
-
-        for page_idx, image in enumerate(images):
-            page_num = page_idx + 1
-            if page_num % 10 == 0 or page_num == 1:
-                logger.info(f"OCR progress: page {page_num}/{total_pages}")
-                
-            try:
-                # Preprocess: convert to grayscale (optimal for textbooks to preserve decorative letters)
-                preprocessed_image = self._preprocess_for_ocr(image, use_binarization=False)
-                
-                # Run Tesseract OCR for Vietnamese with optimized LSTM config and automatic layout
-                custom_config = r'--oem 1'
-                raw_text = pytesseract.image_to_string(preprocessed_image, lang='vie', config=custom_config)
-                if isinstance(raw_text, bytes):
-                    page_text = raw_text.decode('utf-8')
-                elif isinstance(raw_text, str):
-                    page_text = raw_text
-                else:
-                    page_text = str(raw_text)
-                
-                # OCR outputs raw unicode text, no TCVN3 encoding needed
-                self.current_page_is_tcvn3 = False
-                
-                # Apply Vietnamese-specific OCR error corrections
-                page_text = self._fix_ocr_vietnamese(page_text)
-                
-                parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
-                elements.extend(parsed_elements)
-            except Exception as page_err:
-                logger.warning(
-                    f"Error running OCR on page {page_num} of '{source_file}': {page_err}. "
-                    "Skipping page."
-                )
-                continue
+        logger.info(f"Extracting pages from '{source_file}' using pdfplumber and running DeepDoc + VietOCR...")
+        
+        with pdfplumber.open(file_path) as pdf:
+            total_pages = len(pdf.pages)
+            logger.info(f"Starting OCR for {total_pages} pages in '{source_file}'...")
+            for page_idx, page in enumerate(pdf.pages):
+                page_num = page_idx + 1
+                if page_num % 10 == 0 or page_num == 1:
+                    logger.info(f"OCR progress: page {page_num}/{total_pages}")
+                    
+                try:
+                    # Convert page to PIL image
+                    image = page.to_image(resolution=300).original
+                    
+                    # Run DeepDoc + VietOCR pipeline
+                    ocr_results = deepdoc_ocr(np.array(image))
+                    page_text = "\n".join([text_res[0] for _, text_res in ocr_results if text_res and text_res[0]])
+                    
+                    # OCR outputs raw unicode text, no TCVN3 encoding needed
+                    self.current_page_is_tcvn3 = False
+                    
+                    # Apply Vietnamese-specific OCR error corrections
+                    page_text = self._fix_ocr_vietnamese(page_text)
+                    
+                    parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
+                    elements.extend(parsed_elements)
+                except Exception as page_err:
+                    logger.warning(
+                        f"Error running OCR on page {page_num} of '{source_file}': {page_err}. "
+                        "Skipping page."
+                    )
+                    continue
 
         return elements
 
@@ -482,50 +456,44 @@ class PDFReader:
                     
         return text
 
-    def _preprocess_for_ocr(self, pil_image, use_binarization: bool = False) -> "Image.Image":
-        """
-        Applies preprocessing to improve OCR accuracy on complex and decorative fonts.
-        For textbook PDFs, standard grayscale (use_binarization=False) works best to preserve
-        drop caps and avoid noisy background borders.
-        """
-        if not use_binarization:
-            return pil_image.convert('L')
-
-        try:
-            import cv2
-            import numpy as np
+    def _get_deepdoc_ocr(self):
+        """Lazily initialize and return the DeepDoc + VietOCR instance."""
+        if self._deepdoc_ocr is None:
+            import sys
             
-            # Convert PIL image to OpenCV numpy array
-            img = np.array(pil_image)
-            
-            # Convert RGB to Grayscale
-            if len(img.shape) == 3:
-                gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            else:
-                gray = img
+            deepdoc_root = os.getenv("DEEPDOC_PATH")
+            if not deepdoc_root:
+                logger.error("DEEPDOC_PATH environment variable is not set in .env")
+                self._deepdoc_ocr = None
+                return None
                 
-            # Light noise reduction using Gaussian Blur (preserves diacritics well)
-            denoised = cv2.GaussianBlur(gray, (3, 3), 0)
-            
-            # Binarize with Adaptive Thresholding to resolve faded/special fonts and uneven illumination
-            binary = cv2.adaptiveThreshold(
-                denoised, 
-                255, 
-                cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                cv2.THRESH_BINARY, 
-                blockSize=31, 
-                C=10
-            )
-            
-            # Convert back to PIL Image
-            return Image.fromarray(binary)
-        except Exception as preprocess_err:
-            logger.warning(f"OpenCV preprocessing failed: {preprocess_err}. Falling back to standard grayscale.")
-            return pil_image.convert('L')
+            if not os.path.exists(deepdoc_root):
+                logger.error(f"DeepDoc root not found at the configured DEEPDOC_PATH: {deepdoc_root}")
+                self._deepdoc_ocr = None
+                return None
+                
+            if deepdoc_root not in sys.path:
+                sys.path.insert(0, deepdoc_root)
+                
+            try:
+                from module.ocr import OCR
+                
+                original_cwd = os.getcwd()
+                os.chdir(deepdoc_root)
+                try:
+                    self._deepdoc_ocr = OCR()
+                finally:
+                    os.chdir(original_cwd)
+                    
+            except Exception as e:
+                logger.error(f"Failed to load DeepDoc OCR: {e}")
+                self._deepdoc_ocr = None
+                
+        return self._deepdoc_ocr
 
     def _fix_ocr_vietnamese(self, text: str) -> str:
         """
-        Fixes common Tesseract OCR misrecognitions for Vietnamese text.
+        Fixes common OCR misrecognitions for Vietnamese text.
         Primary fix: 'v' misread as 'u' (e.g. 'uăn' -> 'văn').
         Uses word-boundary-aware regex to avoid false positives.
         """
