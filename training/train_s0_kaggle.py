@@ -299,3 +299,155 @@ if EXPORT_GGUF:
     display(FileLink("/kaggle/working/gguf_bundle.zip"))
 
 # Cách khác: vào tab "Output" của Kaggle để tải thẳng, hoặc "Save Version".
+
+
+# #############################################################################
+# ###  PHẦN 2 — EVAL TẬP TEST (chạy ĐỘC LẬP, sau khi đã push adapter lên HF) ###
+# #############################################################################
+#
+# >>> KHI VÀO SESSION MỚI CHỈ ĐỂ CHẤM TEST (KHÔNG train lại) <<<
+#   Chạy đúng thứ tự sau, BỎ QUA hoàn toàn CELL 2–10 (đó là phần train):
+#
+#     1) CELL 1   — cài unsloth            (luôn cần ở session mới)
+#     2) CELL 11  — cấu hình eval          (NHỚ sửa TEST_PATH cho khớp)
+#     3) CELL 12  — PULL adapter từ HF      (thay cho CELL 3 — KHÔNG tạo LoRA mới)
+#     4) CELL 13  — nạp test.jsonl
+#     5) CELL 14  — sinh đáp án            (lâu nhất, ~20–40 phút trên T4)
+#     6) CELL 15  — chấm robustness tự động (ra % từ chối đúng ngay)
+#     7) CELL 16  — xem nhanh vài mẫu normal
+#     8) CELL 17  — lưu file kết quả + tải về
+#
+#   TRƯỚC KHI CHẠY: + Add Input -> Upload -> test.jsonl, rồi sửa TEST_PATH (CELL 11).
+# #############################################################################
+
+
+# ===================== CELL 11 — Cấu hình EVAL (chỉ chỉnh ở đây) ============
+ADAPTER_REPO   = "Tobi2904/Test-Adapter"             # repo adapter (LoRA) trên HF
+EVAL_SEQ_LEN   = 2048                                # = MAX_SEQ_LEN lúc train
+TEST_PATH      = "/kaggle/input/test-s0/test.jsonl"  # SỬA cho khớp nơi upload test.jsonl
+RESULT_PATH    = "/kaggle/working/test_results.jsonl"
+MAX_NEW_TOKENS = 512      # S3/S4 là đoạn văn dài -> 512 token cho khỏi bị cụt
+EVAL_LIMIT     = None     # None = chạy HẾT. Đặt số (vd 5) để chạy thử nhanh trước.
+
+# Từ khóa "từ chối" để chấm TỰ ĐỘNG phần robustness (model được dạy nói
+# "không đủ căn cứ" khi đề bài hỏi thứ KHÔNG có trong ngữ liệu).
+REFUSAL_MARKERS = ["không đủ căn cứ", "không có đủ căn cứ", "không chứa",
+                   "không hề", "không nhắc đến", "không liên quan"]
+
+
+# ===================== CELL 12 — Pull adapter từ HF + bật inference =========
+# KHÁC với CELL 3: KHÔNG tạo LoRA mới (get_peft_model). Trỏ from_pretrained vào
+# repo adapter -> Unsloth TỰ tải base Qwen + gắn sẵn LoRA đã train.
+import torch
+from unsloth import FastLanguageModel
+from unsloth.chat_templates import get_chat_template
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name     = ADAPTER_REPO,
+    max_seq_length = EVAL_SEQ_LEN,
+    dtype          = None,
+    load_in_4bit   = True,
+)
+# Áp lại ĐÚNG template lúc train -> parity tuyệt đối khi format prompt.
+tokenizer = get_chat_template(tokenizer, chat_template="qwen-2.5")
+FastLanguageModel.for_inference(model)   # bật chế độ suy luận nhanh 2x
+print("Đã nạp adapter:", ADAPTER_REPO)
+
+
+# ===================== CELL 13 — Nạp test.jsonl ============================
+import json
+from collections import Counter
+
+rows = []
+with open(TEST_PATH, "r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        r = json.loads(line)
+        if "messages" in r:          # bỏ qua dòng lạ nếu có (test không có preference)
+            rows.append(r)
+
+if EVAL_LIMIT:
+    rows = rows[:EVAL_LIMIT]
+
+print("Tổng mẫu test:", len(rows))
+print("Theo type :", dict(Counter(r.get("type", "?") for r in rows)))
+print("Theo skill:", dict(Counter(r.get("skill", "?") for r in rows)))
+
+
+# ===================== CELL 14 — Sinh đáp án trên cả tập test ==============
+# Mỗi mẫu: lấy [system, user] (BỎ câu assistant gold) -> để model TỰ sinh.
+# do_sample=False (greedy) = khớp temperature 0 lúc serve (parity với RAG).
+import time
+
+@torch.no_grad()
+def gen_answer(prompt_msgs):
+    inputs = tokenizer.apply_chat_template(
+        prompt_msgs, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+    ).to("cuda")
+    out = model.generate(input_ids=inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)
+    # chỉ lấy phần token MỚI sinh (bỏ phần prompt).
+    return tokenizer.decode(out[0][inputs.shape[1]:], skip_special_tokens=True).strip()
+
+results = []
+t0 = time.time()
+for i, r in enumerate(rows, 1):
+    msgs = r["messages"]
+    results.append({
+        "id":    r.get("id"),
+        "skill": r.get("skill"),
+        "type":  r.get("type"),
+        "user":  msgs[-2]["content"],     # câu hỏi (user)
+        "gold":  msgs[-1]["content"],     # đáp án mẫu (assistant)
+        "pred":  gen_answer(msgs[:-1]),   # model tự sinh
+    })
+    if i % 10 == 0 or i == len(rows):
+        print(f"  {i}/{len(rows)} mẫu | {round(time.time() - t0)}s")
+print("Sinh xong.")
+
+
+# ===================== CELL 15 — Chấm robustness TỰ ĐỘNG ===================
+# robustness = đề hỏi thứ KHÔNG có trong ngữ liệu -> model PHẢI từ chối.
+# Đếm % từ chối đúng + liệt kê ca FAIL (model BỊA thay vì từ chối) để xem tay.
+def is_refusal(text):
+    t = text.lower()
+    return any(m in t for m in REFUSAL_MARKERS)
+
+rob      = [r for r in results if r["type"] == "robustness"]
+rob_pass = [r for r in rob if is_refusal(r["pred"])]
+rob_fail = [r for r in rob if not is_refusal(r["pred"])]
+
+pct = round(100 * len(rob_pass) / max(len(rob), 1), 1)
+print(f"=== ROBUSTNESS: {len(rob_pass)}/{len(rob)} từ chối đúng ({pct}%) ===")
+for r in rob_fail[:10]:
+    print(f"\n[FAIL {r['id']}] {r['user'][:80]}...")
+    print(f"  PRED: {r['pred'][:200]}")
+
+
+# ===================== CELL 16 — Xem nhanh vài mẫu normal ==================
+# In thử 3 mẫu normal (gold vs pred) để cảm nhận chất lượng ngay tại chỗ.
+norm = [r for r in results if r["type"] == "normal"]
+print(f"normal: {len(norm)} mẫu (sẽ xuất file để LLM-judge ở CELL 17)\n")
+for r in norm[:3]:
+    print("=" * 70)
+    print(f"[{r['id']} | {r['skill']}] {r['user'][:120]}")
+    print("\n-- GOLD --\n", r["gold"][:400])
+    print("\n-- PRED --\n", r["pred"][:400])
+
+
+# ===================== CELL 17 — Lưu kết quả + link tải về =================
+from IPython.display import FileLink
+
+with open(RESULT_PATH, "w", encoding="utf-8") as f:
+    for r in results:
+        f.write(json.dumps(r, ensure_ascii=False) + "\n")
+print("Đã ghi:", RESULT_PATH, f"({len(results)} dòng)")
+display(FileLink(RESULT_PATH))
+
+# BƯỚC SAU (làm ở máy / notebook khác — không thuộc tập test trên Kaggle):
+#   - normal (177 mẫu): đưa gold + pred qua LLM-judge (Gemini/Claude) chấm rubric:
+#       1) đúng kiến thức (biện pháp/thể loại/tone)  2) bám ngữ liệu
+#       3) không bịa  4) văn phong
+#   - so sánh với BASE Qwen trên cùng prompt (qua API so sánh bạn đã dựng)
+#     -> chứng minh fine-tune thực sự hơn base, không chỉ "nghe hay".
