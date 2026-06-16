@@ -14,6 +14,7 @@ from core.semantic_chunker import SemanticChunker
 from core.chunk_validator import ChunkValidator
 from core.embedder import Embedder
 from core.mongo_writer import MongoWriter
+from core.gemini_refiner import GeminiRefiner
 from models.chunk_schema import ChunkSchema, ChunkPosition, ChunkMetadata
 
 logger = logging.getLogger("rag-service.services.ingest-service")
@@ -199,6 +200,7 @@ class IngestService:
             chunker = SemanticChunker()
             validator = ChunkValidator()
             embedder = Embedder()
+            refiner = GeminiRefiner()
             
             # Fetch mongo client config
             mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/rag_db")
@@ -216,7 +218,11 @@ class IngestService:
                             f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và OCR dự phòng thất bại. "
                             f"Vui lòng kiểm tra cấu hình DEEPDOC_PATH trong tệp .env (hiện tại: {deepdoc_path})."
                         )
-                    
+                    # 1.5. Gemini Refinement (Optional)
+                    if refiner.is_available():
+                        elements = refiner.refine(elements)
+                        logger.info(f"[{job_id}] Gemini refinement completed for '{filename}'")
+                        
                     # 2. Detect Structure
                     sections = detector.detect(elements)
                     
