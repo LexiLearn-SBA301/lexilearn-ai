@@ -252,3 +252,47 @@ class TestGeminiRefiner:
         text_plain_wrapper = "```\nplain block\n```"
         result3 = GeminiRefiner._strip_markdown_wrapper(text_plain_wrapper)
         assert result3 == "plain block"
+
+    @patch("core.gemini_refiner.os.getenv")
+    @patch("httpx.post")
+    def test_ollama_backend_success(self, mock_post, mock_getenv):
+        """Test that Ollama backend is used and succeeds."""
+        mock_getenv.side_effect = lambda key, default="": {
+            "REFINER_BACKEND": "ollama",
+            "OLLAMA_URL": "http://localhost:11434",
+            "OLLAMA_LLM_MODEL": "qwen2.5:3b"
+        }.get(key, default)
+        
+        refiner = GeminiRefiner()
+        assert refiner.backend == "ollama"
+        assert refiner.is_available() is True
+        
+        # Mock httpx response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "message": {
+                "content": "Refined text from Ollama"
+            }
+        }
+        mock_post.return_value = mock_response
+        
+        result = refiner._call_gemini("Test prompt")
+        assert result == "Refined text from Ollama"
+        mock_post.assert_called_once()
+        
+    @patch("core.gemini_refiner.os.getenv")
+    @patch("httpx.post")
+    def test_ollama_backend_failure(self, mock_post, mock_getenv):
+        """Test that Ollama backend handles failure and retries."""
+        mock_getenv.side_effect = lambda key, default="": {
+            "REFINER_BACKEND": "ollama"
+        }.get(key, default)
+        
+        refiner = GeminiRefiner()
+        
+        # Mock httpx to raise exception
+        mock_post.side_effect = Exception("Ollama connection error")
+        
+        result = refiner._call_gemini("Test prompt")
+        assert result is None

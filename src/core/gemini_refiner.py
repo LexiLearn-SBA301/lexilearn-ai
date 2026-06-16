@@ -22,21 +22,28 @@ class GeminiRefiner:
     """
 
     def __init__(self, config_path: Optional[str] = None):
+        self.backend = os.getenv("REFINER_BACKEND", "gemini").lower().strip()
+        self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        self.ollama_model = os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:3b")
+
         raw_key = os.getenv("GEMINI_API_KEY", "")
         self.api_key = raw_key.strip() if raw_key else None
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         
         self.client = None
-        if not genai:
-            logger.warning("google-genai library is not installed. GeminiRefiner will be disabled. Run: pip install google-genai")
-        elif not self.api_key:
-            logger.info("GEMINI_API_KEY is not set in .env. GeminiRefiner will be disabled.")
-        else:
-            try:
-                self.client = genai.Client(api_key=self.api_key)
-                logger.info(f"GeminiRefiner initialized with model '{self.model_name}'")
-            except Exception as e:
-                logger.error(f"Failed to initialize Gemini Client: {e}. GeminiRefiner will be disabled.")
+        if self.backend == "gemini":
+            if not genai:
+                logger.warning("google-genai library is not installed. GeminiRefiner will be disabled. Run: pip install google-genai")
+            elif not self.api_key:
+                logger.info("GEMINI_API_KEY is not set in .env. GeminiRefiner will be disabled.")
+            else:
+                try:
+                    self.client = genai.Client(api_key=self.api_key)
+                    logger.info(f"GeminiRefiner initialized with Gemini model '{self.model_name}'")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Gemini Client: {e}. GeminiRefiner will be disabled.")
+        elif self.backend == "ollama":
+            logger.info(f"GeminiRefiner initialized with local Ollama backend (model: '{self.ollama_model}', url: '{self.ollama_url}')")
 
         # Load configuration
         if not config_path:
@@ -53,11 +60,14 @@ class GeminiRefiner:
                 "batch_size_pages": 5,
                 "max_retries": 2,
                 "retry_delay_seconds": 2,
+                "delay_between_batches_seconds": 5,
                 "temperature": 0.1
             }
 
     def is_available(self) -> bool:
         """Check if Gemini API is configured and available."""
+        if self.backend == "ollama":
+            return True
         return self.client is not None
 
     def refine(self, elements: List[ExtractedElement]) -> List[ExtractedElement]:
@@ -105,6 +115,13 @@ class GeminiRefiner:
                     else:
                         logger.warning(f"Failed to parse refined text for page {p}. Keeping original.")
 
+            # Sleep between batches to respect rate limits (RPM)
+            if i + batch_size < len(page_numbers):
+                delay_between = self.config.get("delay_between_batches_seconds", 5)
+                if delay_between > 0:
+                    logger.info(f"Waiting {delay_between}s before the next batch to respect rate limits...")
+                    time.sleep(delay_between)
+
         return elements
 
     def _group_by_page(self, elements: List[ExtractedElement]) -> dict:
@@ -117,7 +134,10 @@ class GeminiRefiner:
         return pages
 
     def _call_gemini(self, prompt: str) -> Optional[str]:
-        """Calls Gemini API with retry logic."""
+        """Calls Gemini API or Ollama API depending on backend."""
+        if self.backend == "ollama":
+            return self._call_ollama(prompt)
+
         if self.client is None:
             logger.warning("Gemini Client is not initialized. Skipping API call.")
             return None
@@ -148,10 +168,51 @@ class GeminiRefiner:
                 return None
             except Exception as e:
                 if attempt < max_retries:
-                    logger.warning(f"Gemini API call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay}s...")
-                    time.sleep(delay)
+                    current_delay = delay * (2 ** attempt)
+                    # Extend delay significantly if we hit rate limit or service unavailable (429/503)
+                    err_str = str(e).upper()
+                    if "429" in err_str or "503" in err_str or "EXHAUSTED" in err_str or "LIMIT" in err_str:
+                        current_delay = max(current_delay, 15)
+                    logger.warning(f"Gemini API call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {current_delay}s...")
+                    time.sleep(current_delay)
                 else:
                     logger.error(f"Gemini API call failed after {max_retries + 1} attempts: {e}")
+                    return None
+        return None
+
+    def _call_ollama(self, prompt: str) -> Optional[str]:
+        """Calls local Ollama API with retry logic."""
+        import httpx
+        max_retries = self.config.get("max_retries", 2)
+        delay = self.config.get("retry_delay_seconds", 2)
+        temp = self.config.get("temperature", 0.1)
+
+        url = f"{self.ollama_url.rstrip('/')}/api/chat"
+        payload = {
+            "model": self.ollama_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "options": {
+                "temperature": temp
+            }
+        }
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = httpx.post(url, json=payload, timeout=90.0)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    if "message" in res_json and "content" in res_json["message"]:
+                        return res_json["message"]["content"]
+                logger.warning(f"Ollama API returned status {response.status_code}. Retrying...")
+                if attempt < max_retries:
+                    time.sleep(delay)
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Ollama API call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay}s...")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"Ollama API call failed after {max_retries + 1} attempts: {e}")
                     return None
         return None
 

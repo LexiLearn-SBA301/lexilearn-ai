@@ -4,5 +4,6 @@
   "max_tokens_per_batch": 4000,
   "max_retries": 2,
   "retry_delay_seconds": 2,
+  "delay_between_batches_seconds": 5,
   "temperature": 0.1
 }
