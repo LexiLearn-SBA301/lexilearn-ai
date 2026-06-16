@@ -190,11 +190,20 @@ class Embedder:
 
         Tên model lấy từ env OLLAMA_EMBED_MODEL (mặc định 'bge-m3').
         """
-        from providers.ollama_provider import ollama_provider
+        from dotenv import load_dotenv
+        load_dotenv()
+        from langchain_huggingface import HuggingFaceEmbeddings
 
-        logger.info(
-            "Loading embeddings via Ollama (model=%s)",
-            os.getenv("OLLAMA_EMBED_MODEL", "bge-m3"),
+        logger.info("Loading model '%s' on device '%s' via LangChain...", self._model_name, self._device)
+
+        model = HuggingFaceEmbeddings(
+            model_name=self._model_name,
+            model_kwargs={"device": self._device},
+            encode_kwargs={
+                "normalize_embeddings": self._normalize,
+                "batch_size": self._batch_size,
+            },
+            show_progress=self._show_progress,
         )
         return ollama_provider.get_embeddings()
 

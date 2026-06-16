@@ -9,6 +9,8 @@ langchain-mongodb
 langchain-ollama
 pdfplumber
 PyPDF2
+pytesseract
+pdf2image
 vietnamese
 underthesea
 numpy
