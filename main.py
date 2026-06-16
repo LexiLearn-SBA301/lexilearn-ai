@@ -9,6 +9,7 @@ load_dotenv()
 # Add src folder to sys.path
 sys.path.append("src")
 from db.mongo_client import connect_to_mongo, close_mongo_connection
+from api.chat_router import router as chat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,6 +25,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Đăng ký các router API (tầng route nằm trong src/api/)
+app.include_router(chat_router)
 
 @app.get("/")
 def read_root():
