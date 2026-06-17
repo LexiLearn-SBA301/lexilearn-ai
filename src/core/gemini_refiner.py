@@ -20,18 +20,31 @@ class GeminiRefiner:
     Refines extracted text using Google Gemini API before chunking.
     Batches multiple pages to reduce API calls and costs.
     """
+    BACKEND_GEMINI = "gemini"
+    BACKEND_OLLAMA = "ollama"
+    
+    DEFAULT_BACKEND = "gemini"
+    DEFAULT_OLLAMA_URL = "http://localhost:11434"
+    DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
+    DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
     def __init__(self, config_path: Optional[str] = None):
-        self.backend = os.getenv("REFINER_BACKEND", "gemini").lower().strip()
-        self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-        self.ollama_model = os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:3b")
+        backend_env = os.getenv("REFINER_BACKEND", self.DEFAULT_BACKEND)
+        if backend_env:
+            backend_env = str(backend_env).lower().strip()
+        if backend_env not in (self.BACKEND_GEMINI, self.BACKEND_OLLAMA):
+            backend_env = self.DEFAULT_BACKEND
+        self.backend = backend_env
+
+        self.ollama_url = os.getenv("OLLAMA_URL", self.DEFAULT_OLLAMA_URL) or self.DEFAULT_OLLAMA_URL
+        self.ollama_model = os.getenv("OLLAMA_LLM_MODEL", self.DEFAULT_OLLAMA_MODEL) or self.DEFAULT_OLLAMA_MODEL
 
         raw_key = os.getenv("GEMINI_API_KEY", "")
         self.api_key = raw_key.strip() if raw_key else None
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model_name = os.getenv("GEMINI_MODEL", self.DEFAULT_GEMINI_MODEL) or self.DEFAULT_GEMINI_MODEL
         
         self.client = None
-        if self.backend == "gemini":
+        if self.backend == self.BACKEND_GEMINI:
             if not genai:
                 logger.warning("google-genai library is not installed. GeminiRefiner will be disabled. Run: pip install google-genai")
             elif not self.api_key:
@@ -42,7 +55,7 @@ class GeminiRefiner:
                     logger.info(f"GeminiRefiner initialized with Gemini model '{self.model_name}'")
                 except Exception as e:
                     logger.error(f"Failed to initialize Gemini Client: {e}. GeminiRefiner will be disabled.")
-        elif self.backend == "ollama":
+        elif self.backend == self.BACKEND_OLLAMA:
             logger.info(f"GeminiRefiner initialized with local Ollama backend (model: '{self.ollama_model}', url: '{self.ollama_url}')")
 
         # Load configuration
@@ -66,7 +79,7 @@ class GeminiRefiner:
 
     def is_available(self) -> bool:
         """Check if Gemini API is configured and available."""
-        if self.backend == "ollama":
+        if self.backend == self.BACKEND_OLLAMA:
             return True
         return self.client is not None
 
@@ -135,7 +148,7 @@ class GeminiRefiner:
 
     def _call_gemini(self, prompt: str) -> Optional[str]:
         """Calls Gemini API or Ollama API depending on backend."""
-        if self.backend == "ollama":
+        if self.backend == self.BACKEND_OLLAMA:
             return self._call_ollama(prompt)
 
         if self.client is None:
