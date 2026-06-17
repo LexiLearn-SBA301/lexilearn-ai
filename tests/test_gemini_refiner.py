@@ -20,8 +20,8 @@ class TestGeminiRefiner:
         
         refiner = GeminiRefiner()
         
-        assert refiner.api_key == "dummy_key"
-        assert refiner.model_name == "gemini-2.0-flash"
+        assert refiner.gemini_api_key == "dummy_key"
+        assert refiner.gemini_model == "gemini-2.0-flash"
         assert refiner.is_available() is True
         mock_genai.Client.assert_called_once_with(api_key="dummy_key")
 
@@ -32,7 +32,7 @@ class TestGeminiRefiner:
         
         refiner = GeminiRefiner()
         
-        assert refiner.api_key is None
+        assert refiner.gemini_api_key is None
         assert refiner.is_available() is False
         assert refiner.client is None
 
@@ -43,7 +43,7 @@ class TestGeminiRefiner:
         
         refiner = GeminiRefiner()
         
-        assert refiner.api_key is None or refiner.api_key == ""
+        assert refiner.gemini_api_key is None or refiner.gemini_api_key == ""
         assert refiner.is_available() is False
         assert refiner.client is None
 
@@ -264,7 +264,7 @@ class TestGeminiRefiner:
         }.get(key, default)
         
         refiner = GeminiRefiner()
-        assert refiner.backend == "ollama"
+        assert refiner.refiner_backend == "ollama"
         assert refiner.is_available() is True
         
         # Mock httpx response

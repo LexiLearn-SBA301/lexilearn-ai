@@ -1,3 +1,4 @@
+
 import os
 import json
 import time
@@ -21,44 +22,44 @@ class GeminiRefiner:
     Batches multiple pages to reduce API calls and costs.
     """
     # Keys of environment variables in .env
-    ENV_BACKEND = "REFINER_BACKEND"
-    ENV_OLLAMA_URL = "OLLAMA_URL"
-    ENV_OLLAMA_MODEL = "OLLAMA_LLM_MODEL"
-    ENV_GEMINI_KEY = "GEMINI_API_KEY"
-    ENV_GEMINI_MODEL = "GEMINI_MODEL"
+    REFINER_BACKEND = "REFINER_BACKEND"
+    OLLAMA_URL = "OLLAMA_URL"
+    OLLAMA_LLM_MODEL = "OLLAMA_LLM_MODEL"
+    GEMINI_API_KEY = "GEMINI_API_KEY"
+    GEMINI_MODEL = "GEMINI_MODEL"
 
     BACKEND_GEMINI = "gemini"
     BACKEND_OLLAMA = "ollama"
 
     def __init__(self, config_path: Optional[str] = None):
-        backend_env = os.getenv(self.ENV_BACKEND, self.BACKEND_GEMINI)
+        backend_env = os.getenv(self.REFINER_BACKEND, self.BACKEND_GEMINI)
         if backend_env:
             backend_env = str(backend_env).lower().strip()
         if backend_env not in (self.BACKEND_GEMINI, self.BACKEND_OLLAMA):
             backend_env = self.BACKEND_GEMINI
-        self.backend = backend_env
+        self.refiner_backend = backend_env
 
-        self.ollama_url = os.getenv(self.ENV_OLLAMA_URL)
-        self.ollama_model = os.getenv(self.ENV_OLLAMA_MODEL)
+        self.ollama_url = os.getenv(self.OLLAMA_URL, "http://localhost:11434") or "http://localhost:11434"
+        self.ollama_llm_model = os.getenv(self.OLLAMA_LLM_MODEL, "qwen2.5:3b") or "qwen2.5:3b"
 
-        raw_key = os.getenv(self.ENV_GEMINI_KEY, "")
-        self.api_key = raw_key.strip() if raw_key else None
-        self.model_name = os.getenv(self.ENV_GEMINI_MODEL, "gemini-2.5-flash") or "gemini-2.5-flash"
+        raw_key = os.getenv(self.GEMINI_API_KEY, "")
+        self.gemini_api_key = raw_key.strip() if raw_key else None
+        self.gemini_model = os.getenv(self.GEMINI_MODEL, "gemini-2.5-flash") or "gemini-2.5-flash"
         
         self.client = None
-        if self.backend == self.BACKEND_GEMINI:
+        if self.refiner_backend == self.BACKEND_GEMINI:
             if not genai:
                 logger.warning("google-genai library is not installed. GeminiRefiner will be disabled. Run: pip install google-genai")
-            elif not self.api_key:
+            elif not self.gemini_api_key:
                 logger.info("GEMINI_API_KEY is not set in .env. GeminiRefiner will be disabled.")
             else:
                 try:
-                    self.client = genai.Client(api_key=self.api_key)
-                    logger.info(f"GeminiRefiner initialized with Gemini model '{self.model_name}'")
+                    self.client = genai.Client(api_key=self.gemini_api_key)
+                    logger.info(f"GeminiRefiner initialized with Gemini model '{self.gemini_model}'")
                 except Exception as e:
                     logger.error(f"Failed to initialize Gemini Client: {e}. GeminiRefiner will be disabled.")
-        elif self.backend == self.BACKEND_OLLAMA:
-            logger.info(f"GeminiRefiner initialized with local Ollama backend (model: '{self.ollama_model}', url: '{self.ollama_url}')")
+        elif self.refiner_backend == self.BACKEND_OLLAMA:
+            logger.info(f"GeminiRefiner initialized with local Ollama backend (model: '{self.ollama_llm_model}', url: '{self.ollama_url}')")
 
         # Load configuration
         if not config_path:
@@ -81,7 +82,7 @@ class GeminiRefiner:
 
     def is_available(self) -> bool:
         """Check if Gemini API is configured and available."""
-        if self.backend == self.BACKEND_OLLAMA:
+        if self.refiner_backend == self.BACKEND_OLLAMA:
             return True
         return self.client is not None
 
@@ -150,7 +151,7 @@ class GeminiRefiner:
 
     def _call_gemini(self, prompt: str) -> Optional[str]:
         """Calls Gemini API or Ollama API depending on backend."""
-        if self.backend == self.BACKEND_OLLAMA:
+        if self.refiner_backend == self.BACKEND_OLLAMA:
             return self._call_ollama(prompt)
 
         if self.client is None:
@@ -168,13 +169,13 @@ class GeminiRefiner:
             try:
                 if gen_config:
                     response = self.client.models.generate_content(
-                        model=self.model_name,
+                        model=self.gemini_model,
                         contents=prompt,
                         config=gen_config
                     )
                 else:
                     response = self.client.models.generate_content(
-                        model=self.model_name,
+                        model=self.gemini_model,
                         contents=prompt
                     )
                 if response.text:
@@ -204,7 +205,7 @@ class GeminiRefiner:
 
         url = f"{self.ollama_url.rstrip('/')}/api/chat"
         payload = {
-            "model": self.ollama_model,
+            "model": self.ollama_llm_model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
             "options": {
