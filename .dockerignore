@@ -1,0 +1,34 @@
+.git
+.github
+.claude
+
+# Virtualenv / cache
+.venv
+venv
+env
+ENV
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# PDF nặng -> mount qua volume lúc chạy, không nhồi vào image
+docs/
+
+# Dữ liệu & code train không cần cho serving
+data/
+training/
+tests/
+
+# Secrets / môi trường
+.env
+.env.*
+!.env.example
+
+# Linh tinh
+*.ipynb
+*.log

@@ -157,36 +157,13 @@ class TestConfiguration:
 
 
 class TestDeviceDetection:
-    """Tests for auto device detection logic."""
+    """Embeddings chạy qua Ollama (HTTP) nên không còn dò GPU local bằng torch."""
 
     @patch("core.embedder.Embedder._load_model", return_value=_make_mock_model())
-    def test_cuda_selected_when_available(self, mock_load, config_path):
-        """CUDA should be selected when available."""
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = True
-        with patch.dict("sys.modules", {"torch": mock_torch}):
-            embedder = Embedder(config_path)
-            assert embedder.device == "cuda"
-
-    @patch("core.embedder.Embedder._load_model", return_value=_make_mock_model())
-    def test_cpu_fallback_when_no_gpu(self, mock_load, config_path):
-        """CPU should be the fallback when no GPU is available."""
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = False
-        mock_torch.backends.mps.is_available.return_value = False
-        with patch.dict("sys.modules", {"torch": mock_torch}):
-            embedder = Embedder(config_path)
-            assert embedder.device == "cpu"
-
-    @patch("core.embedder.Embedder._load_model", return_value=_make_mock_model())
-    def test_mps_selected_when_cuda_unavailable(self, mock_load, config_path):
-        """MPS should be selected when CUDA is unavailable but MPS is."""
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = False
-        mock_torch.backends.mps.is_available.return_value = True
-        with patch.dict("sys.modules", {"torch": mock_torch}):
-            embedder = Embedder(config_path)
-            assert embedder.device == "mps"
+    def test_device_is_ollama(self, mock_load, config_path):
+        """_detect_device luôn trả 'ollama' — embeddings được Ollama phục vụ."""
+        embedder = Embedder(config_path)
+        assert embedder.device == "ollama"
 
 
 

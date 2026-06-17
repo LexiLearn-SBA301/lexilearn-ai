@@ -11,9 +11,6 @@ pdfplumber
 PyPDF2
 vietnamese
 underthesea
-sentence-transformers
-langchain-huggingface
-torch
 numpy
 opencv-python
 vietocr
@@ -25,3 +22,5 @@ cachetools
 pycryptodomex
 strenum
 google-genai
+# Embeddings chạy qua Ollama (xem src/core/embedder.py) -> KHÔNG cần
+# torch / sentence-transformers / langchain-huggingface trong app image.
