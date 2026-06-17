@@ -9,10 +9,18 @@ langchain-mongodb
 langchain-ollama
 pdfplumber
 PyPDF2
-pytesseract
-pdf2image
 vietnamese
 underthesea
 numpy
+opencv-python
+vietocr
+torchvision
+onnxruntime
+pyclipper
+ruamel.yaml
+cachetools
+pycryptodomex
+strenum
+google-genai
 # Embeddings chạy qua Ollama (xem src/core/embedder.py) -> KHÔNG cần
 # torch / sentence-transformers / langchain-huggingface trong app image.

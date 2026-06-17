@@ -20,10 +20,12 @@ Tài liệu này cung cấp toàn bộ các câu lệnh cần thiết để vậ
    * **MongoDB:** Đảm bảo MongoDB đang chạy tại địa chỉ mặc định `mongodb://localhost:27017` (bạn có thể kiểm tra qua dịch vụ Windows Services hoặc mở MongoDB Compass).
    * **Ollama:** Đảm bảo Ollama đang khởi chạy và mô hình sinh câu trả lời `qwen2.5:3b` đã được tải xuống (`ollama pull qwen2.5:3b`).
 
-3. **Cài đặt Tesseract OCR và Poppler (Cho tính năng nạp PDF quét ảnh):**
-   * Hệ thống yêu cầu cài đặt phần mềm bên ngoài cho hệ điều hành Windows để hỗ trợ nạp các tệp PDF dạng ảnh quét:
-     * **Tesseract OCR**: Tải từ [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki). Lúc cài đặt phải chọn bổ sung gói ngôn ngữ `Vietnamese`. (Cập nhật đường dẫn vào `TESSERACT_CMD` trong `.env` nếu cài khác mặc định `C:\Program Files\Tesseract-OCR\tesseract.exe`).
-     * **Poppler**: Tải bản pre-built cho Windows từ [poppler-windows releases](https://github.com/oschwartz10612/poppler-windows/releases). Giải nén và cập nhật đường dẫn tới thư mục `bin` vào biến `POPPLER_PATH` trong `.env`.
+3. **Cấu hình DeepDoc + VietOCR (Cho tính năng nạp PDF quét ảnh):**
+   * Hệ thống sử dụng thư viện DeepDoc (nhận diện bố cục) và VietOCR (nhận diện chữ viết tiếng Việt) để tự động OCR các tệp PDF dạng ảnh quét mà không cần cài đặt Tesseract OCR hay Poppler ngoài hệ thống.
+   * Để kích hoạt, đảm bảo bạn đã clone thư mục dự án `deepdoc_vietocr` chứa mã nguồn và các mô hình cần thiết, sau đó cập nhật đường dẫn vào tệp `.env`:
+     ```env
+     DEEPDOC_PATH=D:\DEV_TINA\deepdoc_vietocr
+     ```
 
 ## II. Các Câu Lệnh Chạy Luồng Hoạt Động (CLI)
 
@@ -60,6 +62,20 @@ Tự động gửi câu hỏi từ tệp `ground_truth.json` (100 câu hỏi vă
 ```powershell
 python main.py --evaluate
 ```
+
+### 4. Luồng Kiểm Thử Tự Động (Automated Testing)
+Hệ thống sử dụng thư viện `pytest` để chạy các bộ kiểm thử tự động, đảm bảo tính toàn vẹn của các module (Bảo mật InjectionGuard, Semantic Chunking, Embedder, Database, PDFReader...):
+
+* **Chạy toàn bộ các bài kiểm thử:**
+  ```powershell
+  python -m pytest
+  ```
+* **Chạy chi tiết cho một tệp kiểm thử cụ thể (ví dụ: test_rag_service.py):**
+  ```powershell
+  python -m pytest tests/test_rag_service.py -v
+  ```
+
+
 
 ---
 

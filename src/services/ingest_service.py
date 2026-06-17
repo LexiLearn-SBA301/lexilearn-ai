@@ -14,6 +14,7 @@ from core.semantic_chunker import SemanticChunker
 from core.chunk_validator import ChunkValidator
 from core.embedder import Embedder
 from core.mongo_writer import MongoWriter
+from core.gemini_refiner import GeminiRefiner
 from models.chunk_schema import ChunkSchema, ChunkPosition, ChunkMetadata
 
 logger = logging.getLogger("rag-service.services.ingest-service")
@@ -59,6 +60,15 @@ class IngestService:
         connect_to_mongo()
         self.db = get_database()
         self.jobs_collection = self.db["ingestion_jobs"]
+        
+        # Load known authors configuration
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "ingest_service_config.json"))
+        import json
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        self.known_authors = config["known_authors"]
+        
         logger.info("IngestService initialized successfully.")
 
     def start_ingestion(self, pdf_path_or_dir: str) -> str:
@@ -114,6 +124,55 @@ class IngestService:
         job = self.jobs_collection.find_one({"job_id": job_id}, {"_id": 0})
         return job
 
+    def _resolve_work_title(self, chunk_title: str, page_start: int, sections: list) -> str:
+        """
+        Traces the parent section chain in the DocumentSections to resolve the actual literary work name (Level 0).
+        """
+        matching_section = None
+        for sec in sections:
+            if sec.title == chunk_title and sec.page_start <= page_start <= sec.page_end:
+                matching_section = sec
+                break
+                
+        if not matching_section:
+            for sec in sections:
+                if sec.title == chunk_title:
+                    matching_section = sec
+                    break
+                    
+        if not matching_section:
+            return chunk_title or "Sách Giáo Khoa"
+            
+        current = matching_section
+        visited = set()
+        while current and current.level > 0 and current.title not in visited:
+            visited.add(current.title)
+            parent = next((s for s in reversed(sections) if s.title == current.parent_title), None)
+            if not parent:
+                break
+            current = parent
+            
+        return current.title if current else chunk_title or "Sách Giáo Khoa"
+
+    def _clean_title_and_author(self, title: str) -> tuple[str, str]:
+        if not title:
+            return "", "Bộ Giáo Dục và Đào Tạo"
+            
+        upper_title = title.upper()
+        for raw_auth, clean_auth in self.known_authors.items():
+            pattern = rf"\s*[\s_\-\—\–:]+\s*{re.escape(raw_auth)}\s*$"
+            pattern_space = rf"\s+{re.escape(raw_auth)}\s*$"
+            
+            if re.search(pattern, upper_title):
+                cleaned_title = re.sub(pattern, "", title, flags=re.IGNORECASE).strip()
+                return cleaned_title, clean_auth
+            elif re.search(pattern_space, upper_title):
+                cleaned_title = re.sub(pattern_space, "", title, flags=re.IGNORECASE).strip()
+                return cleaned_title, clean_auth
+                
+        return title, "Bộ Giáo Dục và Đào Tạo"
+
+
     def _run_ingestion_sync(self, job_id: str, pdf_files: List[str]) -> None:
         """
         Synchronous background runner function executed in a separate thread.
@@ -141,6 +200,7 @@ class IngestService:
             chunker = SemanticChunker()
             validator = ChunkValidator()
             embedder = Embedder()
+            refiner = GeminiRefiner()
             
             # Fetch mongo client config
             mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/rag_db")
@@ -153,26 +213,16 @@ class IngestService:
                     # 1. Read PDF
                     elements = reader.read(pdf_path)
                     if not elements:
-                        try:
-                            import pytesseract
-                            import pdf2image
-                            has_ocr_deps = True
-                        except ImportError:
-                            has_ocr_deps = False
-
-                        if not has_ocr_deps:
-                            raise ValueError(
-                                f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text). "
-                                "Không thể kích hoạt OCR dự phòng do thiếu thư viện 'pytesseract' hoặc 'pdf2image'. "
-                                "Vui lòng kiểm tra xem bạn đã kích hoạt môi trường ảo (.venv) chưa bằng cách chạy: "
-                                ".venv\\Scripts\\python main.py ..."
-                            )
-                        else:
-                            raise ValueError(
-                                f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và OCR dự phòng thất bại. "
-                                "Vui lòng kiểm tra lại đường dẫn cài đặt TESSERACT_CMD và POPPLER_PATH trong tệp .env."
-                            )
-                    
+                        deepdoc_path = os.getenv("DEEPDOC_PATH")
+                        raise ValueError(
+                            f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và OCR dự phòng thất bại. "
+                            f"Vui lòng kiểm tra cấu hình DEEPDOC_PATH trong tệp .env (hiện tại: {deepdoc_path})."
+                        )
+                    # 1.5. Gemini Refinement (Optional)
+                    if refiner.is_available():
+                        elements = refiner.refine(elements)
+                        logger.info(f"[{job_id}] Gemini refinement completed for '{filename}'")
+                        
                     # 2. Detect Structure
                     sections = detector.detect(elements)
                     
@@ -212,9 +262,16 @@ class IngestService:
                             chunk_index=idx,
                             total_chunks=total_chunks
                         )
+                        resolved_title = self._resolve_work_title(
+                            chunk.section_title,
+                            chunk.page_start,
+                            sections
+                        )
+                        clean_title, resolved_author = self._clean_title_and_author(resolved_title)
+
                         metadata = ChunkMetadata(
-                            ten_tac_pham=chunk.section_title or "Sách Giáo Khoa",
-                            tac_gia="Bộ Giáo Dục và Đào Tạo",
+                            ten_tac_pham=clean_title,
+                            tac_gia=resolved_author,
                             lop=file_metadata["lop"],
                             the_loai=chunk.content_type,
                             hoc_ki=file_metadata["hoc_ki"],

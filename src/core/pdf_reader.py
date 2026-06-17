@@ -15,15 +15,6 @@ try:
 except ImportError:
     PyPDF2 = None
 
-try:
-    import pytesseract
-except ImportError:
-    pytesseract = None
-
-try:
-    from pdf2image import convert_from_path
-except ImportError:
-    convert_from_path = None
 
 logger = logging.getLogger("rag-service.pdf-reader")
 
@@ -45,27 +36,20 @@ class PDFReader:
     and falls back to PyPDF2 if pdfplumber fails.
     """
 
-    HEADING_KEYWORDS = {
-        "chương", "bài", "phần", "ghi nhớ", "tiểu dẫn", 
-        "tác giả", "tác phẩm", "tóm tắt", "luyện tập", 
-        "đọc hiểu", "đọc - hiểu", "văn bản", "tri thức ngữ văn"
-    }
-
     def __init__(self) -> None:
         from dotenv import load_dotenv
         load_dotenv()
         
-        # Configure Tesseract and Poppler paths if provided
-        tesseract_cmd = os.getenv("TESSERACT_CMD")
-        if pytesseract and tesseract_cmd and os.path.exists(tesseract_cmd):
-            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        # Load heading keywords from config
+        config = self._load_config()
+        self.heading_keywords = set(config["heading_keywords"])
         
-        self.poppler_path: Optional[str] = os.getenv("POPPLER_PATH")
+        self._deepdoc_ocr = None
 
     def read(self, file_path: str) -> List[ExtractedElement]:
         """
         Reads a PDF file and extracts a list of structured elements.
-        Falls back to PyPDF2 and Tesseract OCR if primary extraction fails or returns no content.
+        Falls back to PyPDF2 and DeepDoc + VietOCR if primary extraction fails or returns no content.
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"PDF file not found at: {file_path}")
@@ -83,8 +67,8 @@ class PDFReader:
         if elements:
             return elements
 
-        # Tầng 3: Tesseract OCR (cho PDF quét ảnh)
-        elements = self._try_extract(self._extract_with_ocr, file_path, source_file, "Tesseract OCR")
+        # Tầng 3: DeepDoc + VietOCR (cho PDF quét ảnh)
+        elements = self._try_extract(self._extract_with_ocr, file_path, source_file, "DeepDoc + VietOCR")
         if elements:
             return elements
 
@@ -218,59 +202,53 @@ class PDFReader:
 
     def _extract_with_ocr(self, file_path: str, source_file: str) -> List[ExtractedElement]:
         """
-        Third fallback parser using Tesseract OCR for scanned image PDFs.
-        Converts PDF pages to images and runs OCR to extract text.
+        Third fallback parser using DeepDoc + VietOCR for scanned image PDFs.
+        Converts PDF pages to images using pdfplumber and runs OCR to extract text.
         """
-        if pytesseract is None or convert_from_path is None:
-            raise ImportError(
-                "OCR dependencies are not installed. "
-                "Please run: pip install pytesseract pdf2image"
+        import numpy as np
+
+        deepdoc_ocr = self._get_deepdoc_ocr()
+        if deepdoc_ocr is None:
+            deepdoc_root = os.getenv("DEEPDOC_PATH")
+            raise RuntimeError(
+                f"DeepDoc + VietOCR engine could not be initialized. "
+                f"Please check your DEEPDOC_PATH in .env (currently: '{deepdoc_root}')."
             )
 
         elements: List[ExtractedElement] = []
         
-        logger.info(f"Converting '{source_file}' to images for OCR...")
-        try:
-            # Convert PDF pages to PIL images
-            if self.poppler_path:
-                images = convert_from_path(file_path, poppler_path=self.poppler_path)
-            else:
-                images = convert_from_path(file_path)
-        except Exception as e:
-            raise RuntimeError(f"Failed to convert PDF to images (check poppler installation): {e}")
-
-        total_pages = len(images)
-        logger.info(f"Starting OCR for {total_pages} pages in '{source_file}'...")
-
-        for page_idx, image in enumerate(images):
-            page_num = page_idx + 1
-            if page_num % 10 == 0 or page_num == 1:
-                logger.info(f"OCR progress: page {page_num}/{total_pages}")
-                
-            try:
-                # Preprocess: convert to grayscale
-                gray_image = image.convert('L')
-                
-                # Run Tesseract OCR for Vietnamese
-                raw_text = pytesseract.image_to_string(gray_image, lang='vie')
-                if isinstance(raw_text, bytes):
-                    page_text = raw_text.decode('utf-8')
-                elif isinstance(raw_text, str):
-                    page_text = raw_text
-                else:
-                    page_text = str(raw_text)
-                
-                # OCR outputs raw unicode text, no TCVN3 encoding needed
-                self.current_page_is_tcvn3 = False
-                
-                parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
-                elements.extend(parsed_elements)
-            except Exception as page_err:
-                logger.warning(
-                    f"Error running OCR on page {page_num} of '{source_file}': {page_err}. "
-                    "Skipping page."
-                )
-                continue
+        logger.info(f"Extracting pages from '{source_file}' using pdfplumber and running DeepDoc + VietOCR...")
+        
+        with pdfplumber.open(file_path) as pdf:
+            total_pages = len(pdf.pages)
+            logger.info(f"Starting OCR for {total_pages} pages in '{source_file}'...")
+            for page_idx, page in enumerate(pdf.pages):
+                page_num = page_idx + 1
+                if page_num % 10 == 0 or page_num == 1:
+                    logger.info(f"OCR progress: page {page_num}/{total_pages}")
+                    
+                try:
+                    # Convert page to PIL image
+                    image = page.to_image(resolution=300).original
+                    
+                    # Run DeepDoc + VietOCR pipeline
+                    ocr_results = deepdoc_ocr(np.array(image))
+                    page_text = "\n".join([text_res[0] for _, text_res in ocr_results if text_res and text_res[0]])
+                    
+                    # OCR outputs raw unicode text, no TCVN3 encoding needed
+                    self.current_page_is_tcvn3 = False
+                    
+                    # Apply Vietnamese-specific OCR error corrections
+                    page_text = self._fix_ocr_vietnamese(page_text)
+                    
+                    parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
+                    elements.extend(parsed_elements)
+                except Exception as page_err:
+                    logger.warning(
+                        f"Error running OCR on page {page_num} of '{source_file}': {page_err}. "
+                        "Skipping page."
+                    )
+                    continue
 
         return elements
 
@@ -287,7 +265,7 @@ class PDFReader:
         current_para_lines: List[str] = []
 
         for line in lines:
-            cleaned = self._clean_text(line)
+            cleaned = self._clean_text(line, is_final=False)
             if not cleaned:
                 continue
 
@@ -296,11 +274,15 @@ class PDFReader:
                     elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
                     current_para_lines = []
                 
+                heading_text = cleaned
+                if cleaned.lower().startswith("đọc thêm") or cleaned.lower().startswith("0ọc thêm"):
+                    heading_text = self._clean_doc_them_heading(cleaned)
+                
                 elements.append(
                     ExtractedElement(
                         page=page_num,
                         type="heading",
-                        raw_text=cleaned,
+                        raw_text=heading_text,
                         source_file=source_file
                     )
                 )
@@ -339,11 +321,188 @@ class PDFReader:
         """
         joined_text = " ".join(lines)
         return ExtractedElement(
+
             page=page_num,
             type="paragraph",
             raw_text=self._clean_text(joined_text),
             source_file=source_file
         )
+
+    _config: Optional[dict] = None
+    _ocr_correction_patterns: Optional[List[tuple]] = None
+    _ocr_corrections: Optional[dict] = None
+    _compiled_word_corrections: Optional[List[tuple]] = None
+
+    @classmethod
+    def _load_config(cls) -> dict:
+        """Lazily load configuration from pdf_reader_config.json."""
+        if cls._config is None:
+            import json
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "pdf_reader_config.json"))
+            with open(config_path, "r", encoding="utf-8") as f:
+                cls._config = json.load(f)
+        return cls._config
+
+    @classmethod
+    def _get_ocr_patterns(cls) -> List[tuple]:
+        """Lazily compile OCR correction regex patterns."""
+        if cls._ocr_correction_patterns is None:
+            cls._ocr_correction_patterns = []
+            config = cls._load_config()
+            ocr_v_syllables = config["ocr_v_syllables"]
+            viet_alpha = config["viet_alpha"]
+            
+            for syllable in ocr_v_syllables:
+                wrong_lower = 'u' + syllable[1:]
+                wrong_upper = 'U' + syllable[1:]
+                correct_upper = 'V' + syllable[1:]
+                # Negative lookbehind/lookahead for Vietnamese alphabetic chars
+                # ensures we only match at syllable boundaries
+                lb = rf'(?<![{viet_alpha}])'
+                la = rf'(?![{viet_alpha}])'
+                cls._ocr_correction_patterns.append((
+                    re.compile(lb + re.escape(wrong_lower) + la),
+                    syllable
+                ))
+                cls._ocr_correction_patterns.append((
+                    re.compile(lb + re.escape(wrong_upper) + la),
+                    correct_upper
+                ))
+        return cls._ocr_correction_patterns
+
+    @classmethod
+    def _load_ocr_corrections(cls) -> dict:
+        """Lazily load OCR correction dictionary from JSON config."""
+        if cls._ocr_corrections is None:
+            import json
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            path = os.path.normpath(os.path.join(current_dir, "..", "config", "ocr_corrections.json"))
+            with open(path, "r", encoding="utf-8") as f:
+                cls._ocr_corrections = json.load(f)
+            
+            # Pre-compile case-insensitive word matching regex patterns
+            cls._compiled_word_corrections = []
+            config = cls._load_config()
+            viet_alpha = config["viet_alpha"]
+            
+            lb = rf'(?<![{viet_alpha}])'
+            la = rf'(?![{viet_alpha}])'
+            # Sort corrections by key length (longest first) to prevent
+            # shorter patterns from consuming characters needed by longer ones
+            # (e.g. "ghỉ" must not match before "nghỉ lễ thử lửa")
+            word_items = sorted(
+                cls._ocr_corrections["word_corrections"].items(),
+                key=lambda item: len(item[0]),
+                reverse=True
+            )
+            for wrong, correct in word_items:
+                pattern = re.compile(lb + re.escape(wrong) + la, re.IGNORECASE)
+                cls._compiled_word_corrections.append((pattern, wrong, correct))
+                
+        return cls._ocr_corrections
+
+    def _apply_ocr_corrections(self, text: str, is_final: bool = True, step: str = "all") -> str:
+        """Applies data-driven OCR corrections from config to avoid hardcoded regexes."""
+        if not text:
+            return ""
+            
+        corrections = self._load_ocr_corrections()
+        
+        if step in ("pre_tcvn3", "all"):
+            # 1. Immediate sentence-start or general character corrections for £ sign
+            # This has to happen before TCVN3 check.
+            if is_final:
+                text = re.sub(r'^£ơ\b', 'Thơ', text)
+                text = re.sub(r'(?<=\.\s)£ơ\b', 'Thơ', text)
+                text = re.sub(r'(?<=\n)£ơ\b', 'Thơ', text)
+                
+                text = re.sub(r'^£', 'T', text)
+                text = re.sub(r'(?<=\.\s)£', 'T', text)
+                text = re.sub(r'(?<=\n)£', 'T', text)
+                
+            # Apply standard character-level replacements
+            for wrong, correct in corrections["char_corrections"].items():
+                text = text.replace(wrong, correct)
+                
+        if step in ("post_tcvn3", "all"):
+            # Replace OCR typo '0ọc'/'0ỌC' -> 'đọc'/'ĐỌC' (dynamic case preservation)
+            def replace_0oc(match):
+                m = match.group(0)
+                if m == '0ỌC':
+                    return 'ĐỌC'
+                elif m == '0ọc':
+                    return 'đọc'
+                return 'Đọc'
+            text = re.sub(r'\b0ọc\b', replace_0oc, text, flags=re.IGNORECASE)
+
+            # 2. Case-aware word replacements from JSON
+            word_corrections = self._compiled_word_corrections or []
+            for pattern, wrong, correct in word_corrections:
+                def case_aware_replace(match, _correct=correct):
+                    original = match.group(0)
+                    if original.isupper():
+                        return _correct.upper()
+                    elif original and original[0].isupper():
+                        return _correct[0].upper() + _correct[1:]
+                    return _correct.lower()
+                text = pattern.sub(case_aware_replace, text)
+                
+            # 3. Final sentence-start capitalizations
+            if is_final:
+                for wrong, correct in corrections["sentence_start_corrections"].items():
+                    text = re.sub(r'^' + re.escape(wrong) + r'\b', correct, text)
+                    text = re.sub(r'(?<=\.\s)' + re.escape(wrong) + r'\b', correct, text)
+                    
+        return text
+
+    def _get_deepdoc_ocr(self):
+        """Lazily initialize and return the DeepDoc + VietOCR instance."""
+        if self._deepdoc_ocr is None:
+            import sys
+            
+            deepdoc_root = os.getenv("DEEPDOC_PATH")
+            if not deepdoc_root:
+                logger.error("DEEPDOC_PATH environment variable is not set in .env")
+                self._deepdoc_ocr = None
+                return None
+                
+            if not os.path.exists(deepdoc_root):
+                logger.error(f"DeepDoc root not found at the configured DEEPDOC_PATH: {deepdoc_root}")
+                self._deepdoc_ocr = None
+                return None
+                
+            if deepdoc_root not in sys.path:
+                sys.path.insert(0, deepdoc_root)
+                
+            try:
+                from module.ocr import OCR
+                
+                original_cwd = os.getcwd()
+                os.chdir(deepdoc_root)
+                try:
+                    self._deepdoc_ocr = OCR()
+                finally:
+                    os.chdir(original_cwd)
+                    
+            except Exception as e:
+                logger.error(f"Failed to load DeepDoc OCR: {e}")
+                self._deepdoc_ocr = None
+                
+        return self._deepdoc_ocr
+
+    def _fix_ocr_vietnamese(self, text: str) -> str:
+        """
+        Fixes common OCR misrecognitions for Vietnamese text.
+        Primary fix: 'v' misread as 'u' (e.g. 'uăn' -> 'văn').
+        Uses word-boundary-aware regex to avoid false positives.
+        """
+        if not text:
+            return text
+        patterns = self._get_ocr_patterns()
+        for pattern, replacement in patterns:
+            text = pattern.sub(replacement, text)
+        return text
 
     def _tcvn3_to_unicode(self, text: str, force: bool = False) -> str:
         """
@@ -363,17 +522,27 @@ class PDFReader:
             return vietnamese.normalize(processed_text, target_charset="UNICODE", source_charset="TCVN3")
         return text
 
-    def _clean_text(self, text: str) -> str:
+    def _clean_text(self, text: str, is_final: bool = True) -> str:
         """
         Normalizes spaces and Unicode characters for Vietnamese text.
         """
         if not text:
             return ""
+        
+        # 1. Pre-TCVN3: Apply early character replacements (£ -> t/T) to prevent false positives in encoding detection
+        text = self._apply_ocr_corrections(text, is_final=is_final, step="pre_tcvn3")
+
+        # 2. Decode TCVN3 to Unicode and normalize
         force_tcvn3 = getattr(self, "current_page_is_tcvn3", False)
         text = self._tcvn3_to_unicode(text, force=force_tcvn3)
         normalized = unicodedata.normalize("NFC", text)
         collapsed_spaces = re.sub(r'[ \t\r\f\v]+', ' ', normalized)
-        return collapsed_spaces.strip()
+        
+        # 3. Post-TCVN3: Apply word-level corrections and final sentence-start formatting
+        text_cleaned = self._apply_ocr_corrections(collapsed_spaces, is_final=is_final, step="post_tcvn3")
+        
+        return text_cleaned.strip()
+
 
     def _is_in_bbox(self, char: dict, bbox: tuple) -> bool:
         """
@@ -403,8 +572,13 @@ class PDFReader:
             return False
 
         has_letters = any(c.isalpha() for c in line)
-        if has_letters and line.isupper():
-            return True
+        if has_letters:
+            # Check if mostly uppercase (at least 75% of letters are uppercase)
+            # This handles OCR noise at the end of lines (e.g. "RA-MA BUỘC TỘI va v‹")
+            letters = [c for c in line if c.isalpha()]
+            upper_letters = [c for c in letters if c.isupper()]
+            if len(upper_letters) / len(letters) >= 0.75:
+                return True
 
         if re.match(r'^[IVXLCDM]+\.?\s+', line):
             return True
@@ -414,22 +588,24 @@ class PDFReader:
             return True
 
         lower_line = line.lower()
-        for kw in self.HEADING_KEYWORDS:
-            if lower_line.startswith(kw + " ") or lower_line == kw:
-                if kw in {"văn bản", "bài", "chương", "phần"}:
-                    after_kw = lower_line[len(kw):].strip()
-                    if not after_kw:
-                        return True
-                    if after_kw.startswith(":") or after_kw.startswith("-"):
-                        return True
-                    words = after_kw.split()
-                    first_word = words[0].rstrip(".:-") if words else ""
-                    if (first_word.isdigit() or 
-                        re.match(r'^[ivxlcdm]+$', first_word) or
-                        first_word in {"học", "đọc", "tập", "trích", "thành", "phụ", "số"}):
-                        return True
-                    return False
-                return True
+        for kw in self.heading_keywords:
+            if lower_line.startswith(kw):
+                after_kw = lower_line[len(kw):]
+                if not after_kw or not after_kw[0].isalnum():
+                    if kw in {"văn bản", "bài", "chương", "phần"}:
+                        after_kw_stripped = after_kw.strip()
+                        if not after_kw_stripped:
+                            return True
+                        if after_kw_stripped.startswith(":") or after_kw_stripped.startswith("-"):
+                            return True
+                        words = after_kw_stripped.split()
+                        first_word = words[0].rstrip(".:-") if words else ""
+                        if (first_word.isdigit() or 
+                            re.match(r'^[ivxlcdm]+$', first_word) or
+                            first_word in {"học", "đọc", "tập", "trích", "thành", "phụ", "số"}):
+                            return True
+                        return False
+                    return True
 
         return False
 
@@ -441,3 +617,36 @@ class PDFReader:
             return False
         
         return bool(re.match(r'^([•\-\*\+\–\—]|\d+[\)\.]|[a-zA-Z][\)\.])\s+', line))
+
+    def _clean_doc_them_heading(self, line: str) -> str:
+        """
+        Normalizes and formats reading selection headings (Đọc thêm).
+        Isolates Level 0 titles in 100% uppercase and corrects common OCR errors.
+        """
+        cleaned = re.sub(r'^[0oO]ọc\s+thêm', 'ĐỌC THÊM', line, flags=re.IGNORECASE)
+        cleaned = re.sub(r'^đọc\s+thêm', 'ĐỌC THÊM', cleaned, flags=re.IGNORECASE)
+        
+        if not cleaned.startswith('ĐỌC THÊM'):
+            return line
+            
+        # Strip parenthetical expressions, e.g. (Trích ...)
+        cleaned = re.sub(r'\s*\([^)]*\)', '', cleaned)
+        
+        # Clean up the separator after 'ĐỌC THÊM'
+        match = re.match(r'^ĐỌC THÊM[\s,:\-\—\–]*(.*)$', cleaned, flags=re.IGNORECASE)
+        if match:
+            title_part = match.group(1).strip()
+            # Clean up trailing noise
+            title_part = re.sub(r'[\s\)\-\—\–]+$', '', title_part)
+            title_part = re.sub(r'\bLm\b', '', title_part).strip()
+            title_part = title_part.strip(",.-:")
+            
+            # Specific correction for 'TIÊN DẶN' -> 'TIỄN DẶN'
+            title_part = re.sub(r'\bTIÊN\s+DẶN\b', 'TIỄN DẶN', title_part, flags=re.IGNORECASE)
+            
+            title_part = title_part.upper()
+            if title_part:
+                return f"ĐỌC THÊM: {title_part}"
+            else:
+                return "ĐỌC THÊM"
+        return cleaned

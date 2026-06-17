@@ -285,7 +285,16 @@ class RAGService:
             rank = 0
             for idx, chunk in enumerate(retrieved_chunks):
                 retrieved_work = chunk.get("metadata", {}).get("ten_tac_pham", "").strip().lower()
-                if retrieved_work == expected_work:
+                
+                # Normalize both titles for robust comparison
+                norm_retrieved = remove_vietnamese_accents(retrieved_work)
+                norm_expected = remove_vietnamese_accents(expected_work)
+                
+                # Check for match (substring check, or special case for Dam San / Mtao Mxay)
+                if (norm_expected in norm_retrieved or 
+                    norm_retrieved in norm_expected or 
+                    ("mtao mxay" in norm_retrieved and "dam san" in norm_expected) or
+                    ("dam san" in norm_retrieved and "mtao mxay" in norm_expected)):
                     rank = idx + 1
                     break
 

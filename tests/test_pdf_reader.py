@@ -26,6 +26,47 @@ def test_text_cleaning(reader):
     assert reader._clean_text("Nhµ xuÊt b¶n Gi¸o dôc") == "Nhà xuất bản Giáo dục"
     assert reader._clean_text("®−îc cuéc sèng cùc nhôc") == "được cuộc sống cực nhục"
     assert reader._clean_text("giμu chÊt th¬ vμ ®Ëm mμu") == "giàu chất thơ và đậm màu"
+    
+    # Test new OCR corrections
+    assert reader._clean_text("NBÔN NGỮ SINH H0ẠT") == "NGÔN NGỮ SINH HOẠT"
+    assert reader._clean_text("PHONG CÁCH NGÔN NGỨỮ SINH HOẠT") == "PHONG CÁCH NGÔN NGỮ SINH HOẠT"
+    assert reader._clean_text("nbôn ngữ sinh h0ạt") == "ngôn ngữ sinh hoạt"
+
+    # Test drop cap corrections with is_final flag
+    assert reader._clean_text("húng ta đã bước vào", is_final=False) == "chúng ta đã bước vào"
+    assert reader._clean_text("húng ta đã bước vào", is_final=True) == "Chúng ta đã bước vào"
+    assert reader._clean_text("ở đây húng ta có", is_final=True) == "ở đây chúng ta có"
+    assert reader._clean_text("ở đây húng ta có", is_final=False) == "ở đây chúng ta có"
+    assert reader._clean_text("cuối câu. húng ta lại", is_final=True) == "cuối câu. Chúng ta lại"
+
+    # Test £, ghỉ and nghỉ OCR corrections
+    assert reader._clean_text("£ự mình chiếm lĩnh", is_final=False) == "tự mình chiếm lĩnh"
+    assert reader._clean_text("£ự mình chiếm lĩnh", is_final=True) == "Tự mình chiếm lĩnh"
+    assert reader._clean_text("£ơ (thơ Nôm)", is_final=False) == "thơ (thơ Nôm)"
+    assert reader._clean_text("bầy cà £ongt)") == "bầy cà tongt)"
+    assert reader._clean_text("£ự", is_final=True) == "Tự"
+    assert reader._clean_text("Ghỉ nhớ") == "Ghi nhớ"
+    assert reader._clean_text("mục ghỉ nhớ ở cuối bài") == "mục ghi nhớ ở cuối bài"
+    assert reader._clean_text("tuy lòng thiếp rất đa nghỉ") == "tuy lòng thiếp rất đa nghi"
+    assert reader._clean_text("tiến hành nghỉ thức") == "tiến hành nghi thức"
+    assert reader._clean_text("nghỉ lễ thử lửa") == "nghi lễ thử lửa"
+    assert reader._clean_text("nghỉ lễ chào đón") == "nghi lễ chào đón"
+    # Ensure standard nghỉ (to rest) is not modified
+    assert reader._clean_text("quyết định nghỉ học") == "quyết định nghỉ học"
+    assert reader._clean_text("về nghỉ hưu") == "về nghỉ hưu"
+
+    # Test page 6 OCR corrections
+    assert reader._clean_text("TỔỒNG QUAN VĂN HỌC") == "TỔNG QUAN VĂN HỌC"
+    assert reader._clean_text("Văn học tân gian") == "Văn học dân gian"
+    assert reader._clean_text("KẾT QUÁ CÂN ĐẠT") == "KẾT QUẢ CẦN ĐẠT"
+    assert reader._clean_text("năng lực sáng tạo tỉnh thần") == "năng lực sáng tạo tinh thần"
+    assert reader._clean_text("hụp thành") == "hợp thành"
+    assert reader._clean_text("pủa văn học") == "của văn học"
+    assert reader._clean_text("văn hc Việt Nam") == "văn học Việt Nam"
+    assert reader._clean_text("Hiếu được") == "Hiểu được"
+
+
+
 
 
 def test_heading_detection(reader):
@@ -46,10 +87,30 @@ def test_heading_detection(reader):
     assert reader._is_heading("Chương II: Văn học trung đại") is True
     assert reader._is_heading("Ghi nhớ") is True
     
+    # Test new reading selection keywords (đọc thêm, 0ọc thêm)
+    assert reader._is_heading("Đọc thêm: Lời tiễn dặn") is True
+    assert reader._is_heading("0ọc thêm, Lời tiên dặn") is True
+    assert reader._is_heading("ĐỌC THÊM LỜI TIỄN DẶN") is True
     
     assert reader._is_heading("") is False
     assert reader._is_heading("Đây là một đoạn văn bình thường trong tác phẩm của Kim Lân và không phải tiêu đề.") is False
     assert reader._is_heading("12345") is False  
+
+def test_clean_doc_them_heading(reader):
+    """
+    Test standardizing and cleaning of 'đọc thêm' headings.
+    """
+    raw_heading = "0ọc THÊM, LỜI TIÊN DẶN Lm) (Trích Tiễn dặn người yêu — truyện thơ dân tộc Thái)"
+    cleaned = reader._clean_doc_them_heading(raw_heading)
+    assert cleaned == "ĐỌC THÊM: LỜI TIỄN DẶN"
+    
+    raw_heading_2 = "đọc thêm - XỐNG CHỤ XON XAO (Dân tộc Thái)"
+    cleaned_2 = reader._clean_doc_them_heading(raw_heading_2)
+    assert cleaned_2 == "ĐỌC THÊM: XỐNG CHỤ XON XAO"
+    
+    raw_heading_3 = "Đọc thêm: Lời tiễn dặn"
+    cleaned_3 = reader._clean_doc_them_heading(raw_heading_3)
+    assert cleaned_3 == "ĐỌC THÊM: LỜI TIỄN DẶN"
 
 def test_list_item_detection(reader):
     """

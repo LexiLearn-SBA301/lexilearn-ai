@@ -130,7 +130,10 @@ class TestIngestService:
 
         # Setup mock pipeline components
         mock_reader = mock_reader_cls.return_value
-        mock_reader.read.return_value = ["para1"]
+        mock_el = MagicMock()
+        mock_el.page = 1
+        mock_el.raw_text = "para1"
+        mock_reader.read.return_value = [mock_el]
 
         mock_detector = mock_detector_cls.return_value
         mock_detector.detect.return_value = ["section1"]
