@@ -20,28 +20,30 @@ class GeminiRefiner:
     Refines extracted text using Google Gemini API before chunking.
     Batches multiple pages to reduce API calls and costs.
     """
+    # Keys of environment variables in .env
+    ENV_BACKEND = "REFINER_BACKEND"
+    ENV_OLLAMA_URL = "OLLAMA_URL"
+    ENV_OLLAMA_MODEL = "OLLAMA_LLM_MODEL"
+    ENV_GEMINI_KEY = "GEMINI_API_KEY"
+    ENV_GEMINI_MODEL = "GEMINI_MODEL"
+
     BACKEND_GEMINI = "gemini"
     BACKEND_OLLAMA = "ollama"
-    
-    DEFAULT_BACKEND = "gemini"
-    DEFAULT_OLLAMA_URL = "http://localhost:11434"
-    DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
-    DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
     def __init__(self, config_path: Optional[str] = None):
-        backend_env = os.getenv("REFINER_BACKEND", self.DEFAULT_BACKEND)
+        backend_env = os.getenv(self.ENV_BACKEND, self.BACKEND_GEMINI)
         if backend_env:
             backend_env = str(backend_env).lower().strip()
         if backend_env not in (self.BACKEND_GEMINI, self.BACKEND_OLLAMA):
-            backend_env = self.DEFAULT_BACKEND
+            backend_env = self.BACKEND_GEMINI
         self.backend = backend_env
 
-        self.ollama_url = os.getenv("OLLAMA_URL", self.DEFAULT_OLLAMA_URL) or self.DEFAULT_OLLAMA_URL
-        self.ollama_model = os.getenv("OLLAMA_LLM_MODEL", self.DEFAULT_OLLAMA_MODEL) or self.DEFAULT_OLLAMA_MODEL
+        self.ollama_url = os.getenv(self.ENV_OLLAMA_URL)
+        self.ollama_model = os.getenv(self.ENV_OLLAMA_MODEL)
 
-        raw_key = os.getenv("GEMINI_API_KEY", "")
+        raw_key = os.getenv(self.ENV_GEMINI_KEY, "")
         self.api_key = raw_key.strip() if raw_key else None
-        self.model_name = os.getenv("GEMINI_MODEL", self.DEFAULT_GEMINI_MODEL) or self.DEFAULT_GEMINI_MODEL
+        self.model_name = os.getenv(self.ENV_GEMINI_MODEL, "gemini-2.5-flash") or "gemini-2.5-flash"
         
         self.client = None
         if self.backend == self.BACKEND_GEMINI:
