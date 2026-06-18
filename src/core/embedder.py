@@ -192,19 +192,9 @@ class Embedder:
         """
         from dotenv import load_dotenv
         load_dotenv()
-        from langchain_huggingface import HuggingFaceEmbeddings
+        from providers.ollama_provider import ollama_provider
 
-        logger.info("Loading model '%s' on device '%s' via LangChain...", self._model_name, self._device)
-
-        model = HuggingFaceEmbeddings(
-            model_name=self._model_name,
-            model_kwargs={"device": self._device},
-            encode_kwargs={
-                "normalize_embeddings": self._normalize,
-                "batch_size": self._batch_size,
-            },
-            show_progress=self._show_progress,
-        )
+        logger.info("Loading model '%s' via Ollama...", self._model_name)
         return ollama_provider.get_embeddings()
 
     @staticmethod

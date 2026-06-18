@@ -17,11 +17,7 @@ except ImportError:
 
 
 class GeminiRefiner:
-    """
-    Refines extracted text using Google Gemini API before chunking.
-    Batches multiple pages to reduce API calls and costs.
-    """
-    # Keys of environment variables in .env
+    
     REFINER_BACKEND = "REFINER_BACKEND"
     OLLAMA_URL = "OLLAMA_URL"
     OLLAMA_LLM_MODEL = "OLLAMA_LLM_MODEL"
@@ -79,6 +75,11 @@ class GeminiRefiner:
                 "delay_between_batches_seconds": 5,
                 "temperature": 0.1
             }
+
+        # Local Ollama 3B models struggle with multi-page batching, so override to 1 page at a time
+        if self.refiner_backend == self.BACKEND_OLLAMA:
+            self.config["batch_size_pages"] = 1
+            self.config["delay_between_batches_seconds"] = 0
 
     def is_available(self) -> bool:
         """Check if Gemini API is configured and available."""
