@@ -214,9 +214,11 @@ class IngestService:
                     elements = reader.read(pdf_path)
                     if not elements:
                         deepdoc_path = os.getenv("DEEPDOC_PATH")
+                        gemini_key = os.getenv("GEMINI_API_KEY")
                         raise ValueError(
-                            f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và OCR dự phòng thất bại. "
-                            f"Vui lòng kiểm tra cấu hình DEEPDOC_PATH trong tệp .env (hiện tại: {deepdoc_path})."
+                            f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và tất cả OCR dự phòng thất bại. "
+                            f"Kiểm tra GEMINI_API_KEY (hiện tại: {'có' if gemini_key else 'chưa cấu hình'}) "
+                            f"và DEEPDOC_PATH (hiện tại: {deepdoc_path})."
                         )
                     # 1.5. Gemini Refinement (Optional)
                     if refiner.is_available():
