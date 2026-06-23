@@ -2,7 +2,7 @@ import os
 import sys
 import pytest
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from core.semantic_chunker import SemanticChunk
 from core.chunk_validator import ChunkValidator, ValidationResult, ValidatedChunk

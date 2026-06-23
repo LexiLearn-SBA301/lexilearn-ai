@@ -2,7 +2,7 @@ import os
 import sys
 import pytest
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import sys
 from unittest.mock import MagicMock
