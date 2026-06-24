@@ -1,3 +1,6 @@
+# Local dev Docker override (bind-mount + hot reload), không lên git
+docker-compose.override.yml
+
 # Environment variables / Credentials
 .env
 .env.*

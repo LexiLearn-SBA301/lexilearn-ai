@@ -3,6 +3,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 # Load environment variables early
@@ -26,6 +27,15 @@ app = FastAPI(
     description="API for Retrieval-Augmented Generation Service",
     version="1.0.0",
     lifespan=lifespan
+)
+
+# Cấu hình CORS cho FE (Vite) gọi API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Đăng ký các router API (tầng route nằm trong src/api/)
