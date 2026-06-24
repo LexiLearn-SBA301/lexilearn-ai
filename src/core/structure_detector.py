@@ -124,12 +124,60 @@ class StructureDetector:
             logger.warning(f"Unclassifiable heading: '{text}'. Defaulting to Level 1.")
             return 1
 
+    def _reclassify_numbered_items(self, elements: List[ExtractedElement]) -> List[ExtractedElement]:
+        """
+        Whitelist rule: numbered_item chỉ là heading khi:
+          1. Section cha gần nhất là heading La Mã (I., II., III....)
+          2. Bản thân dòng ngắn (< 50 ký tự)
+          3. Không chứa dấu ?
+        Tất cả trường hợp khác → chuyển thành paragraph.
+        """
+        result = []
+        last_confirmed_heading_type = None  # Track loại heading gần nhất
+
+        for el in elements:
+            if el.type == "heading":
+                # Ghi nhận loại heading: "roman" hoặc "other"
+                if self._is_roman_heading(el.raw_text.strip()):
+                    last_confirmed_heading_type = "roman"
+                else:
+                    last_confirmed_heading_type = "other"
+                result.append(el)
+
+            elif el.type == "numbered_item":
+                text = el.raw_text.strip() if el.raw_text else ""
+                is_heading = (
+                    last_confirmed_heading_type == "roman"
+                    and len(text) < 50
+                    and "?" not in text
+                )
+
+                if is_heading:
+                    # Promote to heading
+                    result.append(ExtractedElement(
+                        page=el.page, type="heading",
+                        raw_text=el.raw_text, source_file=el.source_file
+                    ))
+                else:
+                    # Demote to paragraph (content)
+                    result.append(ExtractedElement(
+                        page=el.page, type="paragraph",
+                        raw_text=el.raw_text, source_file=el.source_file
+                    ))
+            else:
+                result.append(el)
+
+        return result
+
     def detect(self, elements: List[ExtractedElement]) -> List[DocumentSection]:
         """
         Converts flat ExtractedElements into hierarchical DocumentSections.
         """
         if not elements:
             return []
+
+        # NEW: Reclassify numbered_items based on whitelist rule
+        elements = self._reclassify_numbered_items(elements)
 
         # Pre-process: merge consecutive heading elements that represent a single split heading
         processed_elements = []

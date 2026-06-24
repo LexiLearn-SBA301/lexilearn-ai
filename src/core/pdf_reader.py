@@ -263,7 +263,7 @@ class PDFReader:
                 if page_text.strip().startswith("[HÌNH ẢNH"):
                     continue
                 self.current_page_is_tcvn3 = False
-                parsed = self._parse_text_layout(page_text, page_num, source_file)
+                parsed = self._parse_gemini_text_layout(page_text, page_num, source_file)
                 elements.extend(parsed)
 
             # Delay giữa các batch để tránh rate limit (15 RPM free tier)
@@ -323,7 +323,7 @@ class PDFReader:
                     config=types.GenerateContentConfig(
                         system_instruction=self._GEMINI_OCR_SYSTEM_PROMPT,
                         temperature=0.1,
-                        max_output_tokens=8192,
+                        max_output_tokens=65536,
                     ),
                 )
                 if response.text:
@@ -395,6 +395,54 @@ class PDFReader:
 
         return result
 
+    def _parse_gemini_text_layout(self, text: Optional[str], page_num: int, source_file: str) -> List[ExtractedElement]:
+        """
+        Parses Gemini OCR output with markdown heading markers.
+        """
+        if not text:
+            return []
+
+        lines = text.split("\n")
+        elements: List[ExtractedElement] = []
+        current_para_lines: List[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            if stripped.startswith("#### "):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                heading_text = self._clean_text(stripped[5:])
+                elements.append(ExtractedElement(page=page_num, type="heading", raw_text=heading_text, source_file=source_file))
+            elif stripped.startswith("### "):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                heading_text = self._clean_text(stripped[4:])
+                elements.append(ExtractedElement(page=page_num, type="heading", raw_text=heading_text, source_file=source_file))
+            elif stripped.startswith("## "):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                heading_text = self._clean_text(stripped[3:])
+                elements.append(ExtractedElement(page=page_num, type="heading", raw_text=heading_text, source_file=source_file))
+            else:
+                cleaned = self._clean_text(stripped, is_final=False)
+                if not cleaned:
+                    continue
+                current_para_lines.append(cleaned)
+                if cleaned[-1] in (".", "?", "!", "\u201d", '"'):
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+
+        if current_para_lines:
+            elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+
+        return elements
+
     def _parse_text_layout(self, text: Optional[str], page_num: int, source_file: str) -> List[ExtractedElement]:
         """
         Parses raw text layout of a page line-by-line, merging lines into paragraphs
@@ -412,7 +460,12 @@ class PDFReader:
             if not cleaned:
                 continue
 
-            if self._is_heading(cleaned):
+            if self._is_numbered_item(cleaned):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                elements.append(ExtractedElement(page=page_num, type="numbered_item", raw_text=cleaned, source_file=source_file))
+            elif self._is_heading(cleaned):
                 if current_para_lines:
                     elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
                     current_para_lines = []
@@ -678,8 +731,8 @@ class PDFReader:
         if re.match(r'^[IVXLCDM]+\.?\s+', line):
             return True
 
-        vietnamese_caps = "A-ZÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶEÈÉẺẼẸÊỀẾỂỄỆIÌÍỈĨỊOÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢUÙÚỦŨỤƯỪỨỬỮỰYỲÝỶỸỴ"
-        if re.match(rf'^\d+(\.\d+)*\.?\s+[{vietnamese_caps}]', line):
+        vietnamese_caps = "A-ZÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ"
+        if re.match(rf'^\d+\.\d+(\.\d+)*\.?\s+[{vietnamese_caps}]', line):
             return True
 
         lower_line = line.lower()
@@ -703,6 +756,13 @@ class PDFReader:
                     return True
 
         return False
+
+    def _is_numbered_item(self, line: str) -> bool:
+        """Detect single-level numbered line like '1. Tác giả' or '2. So sánh...'"""
+        if not line:
+            return False
+        vietnamese_caps = "A-ZÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ"
+        return bool(re.match(rf'^\d+\.?\s+[{vietnamese_caps}]', line))
 
     def _is_list_item(self, line: str) -> bool:
         """
