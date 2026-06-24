@@ -375,21 +375,50 @@ class PDFReader:
             text = '\n'.join(lines)
 
         for i, page_num in enumerate(expected_pages):
-            marker = f"=== TRANG {page_num} ==="
-            next_marker = f"=== TRANG {expected_pages[i + 1]} ===" if i + 1 < len(expected_pages) else None
+            start_idx = -1
+            marker_len = 0
 
-            start_idx = text.find(marker)
+            # 1. Thử tìm chính xác marker === TRANG {page_num} ===
+            marker = f"=== TRANG {page_num} ==="
+            idx = text.find(marker)
+            if idx != -1:
+                start_idx = idx
+                marker_len = len(marker)
+            else:
+                # 2. Thử tìm bằng regex linh hoạt (không phân biệt hoa thường, cho phép các ký tự đặc biệt bao quanh)
+                pattern = re.compile(
+                    rf"(?:[=\-#\*]{{1,}}\s*)?(?:TRANG|trang)\s+{page_num}\b(?:\s*[=\-#\*]{{1,}})?",
+                    re.IGNORECASE
+                )
+                match = pattern.search(text)
+                if match:
+                    start_idx = match.start()
+                    marker_len = match.end() - match.start()
+
             if start_idx == -1:
                 logger.warning(f"Marker for page {page_num} not found in Gemini OCR response. Skipping.")
                 continue
 
-            start_content = start_idx + len(marker)
-            if next_marker:
-                end_idx = text.find(next_marker, start_content)
-                if end_idx == -1:
-                    end_idx = len(text)
-            else:
-                end_idx = len(text)
+            start_content = start_idx + marker_len
+
+            # Tìm vị trí kết thúc (bắt đầu của trang tiếp theo)
+            end_idx = len(text)
+            if i + 1 < len(expected_pages):
+                next_page_num = expected_pages[i + 1]
+                # 1. Thử tìm chính xác marker === TRANG {next_page_num} ===
+                next_marker = f"=== TRANG {next_page_num} ==="
+                next_idx = text.find(next_marker, start_content)
+                if next_idx != -1:
+                    end_idx = next_idx
+                else:
+                    # 2. Thử tìm bằng regex linh hoạt cho trang kế tiếp
+                    next_pattern = re.compile(
+                        rf"(?:[=\-#\*]{{1,}}\s*)?(?:TRANG|trang)\s+{next_page_num}\b(?:\s*[=\-#\*]{{1,}})?",
+                        re.IGNORECASE
+                    )
+                    next_match = next_pattern.search(text, start_content)
+                    if next_match:
+                        end_idx = next_match.start()
 
             result[page_num] = text[start_content:end_idx].strip()
 
