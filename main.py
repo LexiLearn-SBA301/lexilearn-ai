@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Add src folder to sys.path
-sys.path.append("src")
+sys.path.insert(0, "src")
 from db.mongo_client import connect_to_mongo, close_mongo_connection
 from api.chat_router import router as chat_router
 

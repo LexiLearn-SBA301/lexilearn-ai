@@ -1,9 +1,11 @@
 import os
 import re
+import io
+import time
 import logging
 import unicodedata
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 try:
     import pdfplumber
@@ -15,12 +17,22 @@ try:
 except ImportError:
     PyPDF2 = None
 
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
+
 
 logger = logging.getLogger("rag-service.pdf-reader")
 
 import vietnamese
 
 TCVN3_SIGNATURE_CHARS = "\u00b5\u00b8\u00b6\u00b7\u00b9\u00a8\u00bb\u00be\u00bc\u00bd\u00c6\u00a9\u00c7\u00cb\u00ae\u00d0\u00ce\u00cf\u00d1\u00aa\u00d6\u00d7\u00d8\u00dc\u00de\u00a7\u00a3\u00a4\u00a5\u00a6\u2212\u03bc\uf02d"
+
+from config.gemini_ocr_system_prompt import GEMINI_OCR_SYSTEM_PROMPT
+
 
 @dataclass
 class ExtractedElement:
@@ -43,8 +55,7 @@ class PDFReader:
         # Load heading keywords from config
         config = self._load_config()
         self.heading_keywords = set(config["heading_keywords"])
-        
-        self._deepdoc_ocr = None
+        self._GEMINI_OCR_SYSTEM_PROMPT = GEMINI_OCR_SYSTEM_PROMPT
 
     def read(self, file_path: str) -> List[ExtractedElement]:
         """
@@ -67,8 +78,8 @@ class PDFReader:
         if elements:
             return elements
 
-        # Tầng 3: DeepDoc + VietOCR (cho PDF quét ảnh)
-        elements = self._try_extract(self._extract_with_ocr, file_path, source_file, "DeepDoc + VietOCR")
+        # Tầng 3: Gemini Vision OCR (cho PDF quét ảnh — dùng LLM multimodal)
+        elements = self._try_extract(self._extract_with_gemini_ocr, file_path, source_file, "Gemini Vision OCR")
         if elements:
             return elements
 
@@ -200,57 +211,189 @@ class PDFReader:
 
         return elements
 
-    def _extract_with_ocr(self, file_path: str, source_file: str) -> List[ExtractedElement]:
-        """
-        Third fallback parser using DeepDoc + VietOCR for scanned image PDFs.
-        Converts PDF pages to images using pdfplumber and runs OCR to extract text.
-        """
-        import numpy as np
+    # ── Gemini Vision OCR (Tầng 3) ────────────────────────────────────
 
-        deepdoc_ocr = self._get_deepdoc_ocr()
-        if deepdoc_ocr is None:
-            deepdoc_root = os.getenv("DEEPDOC_PATH")
-            raise RuntimeError(
-                f"DeepDoc + VietOCR engine could not be initialized. "
-                f"Please check your DEEPDOC_PATH in .env (currently: '{deepdoc_root}')."
-            )
+    def _extract_with_gemini_ocr(self, file_path: str, source_file: str) -> List[ExtractedElement]:
+        """
+        Tầng 3: Dùng Gemini Vision (multimodal LLM) để đọc trực tiếp ảnh trang PDF.
+        Render PDF thành ảnh JPEG, gom batch, gửi lên Gemini 2.0 Flash.
+        """
+        if genai is None:
+            raise ImportError("google-genai is not installed. Run: pip install google-genai")
 
+        api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY is not set in .env. Gemini Vision OCR is disabled.")
+
+        ocr_model = os.getenv("GEMINI_OCR_MODEL", "gemini-2.0-flash")
+        pages_per_batch = int(os.getenv("OCR_PAGES_PER_BATCH", "10"))
+        dpi = int(os.getenv("OCR_DPI", "150"))
+
+        client = genai.Client(api_key=api_key)
+
+        # 1. Render tất cả trang PDF thành ảnh JPEG
+        logger.info(f"Rendering '{source_file}' to images at {dpi} DPI for Gemini Vision OCR...")
+        page_images = self._render_pdf_to_images(file_path, dpi=dpi)
+        total_pages = len(page_images)
+        logger.info(f"Total pages to OCR: {total_pages}")
+
+        if not page_images:
+            return []
+
+        # 2. Chia batch và gửi lên Gemini
         elements: List[ExtractedElement] = []
-        
-        logger.info(f"Extracting pages from '{source_file}' using pdfplumber and running DeepDoc + VietOCR...")
-        
-        with pdfplumber.open(file_path) as pdf:
-            total_pages = len(pdf.pages)
-            logger.info(f"Starting OCR for {total_pages} pages in '{source_file}'...")
-            for page_idx, page in enumerate(pdf.pages):
-                page_num = page_idx + 1
-                if page_num % 10 == 0 or page_num == 1:
-                    logger.info(f"OCR progress: page {page_num}/{total_pages}")
-                    
-                try:
-                    # Convert page to PIL image
-                    image = page.to_image(resolution=300).original
-                    
-                    # Run DeepDoc + VietOCR pipeline
-                    ocr_results = deepdoc_ocr(np.array(image))
-                    page_text = "\n".join([text_res[0] for _, text_res in ocr_results if text_res and text_res[0]])
-                    
-                    # OCR outputs raw unicode text, no TCVN3 encoding needed
-                    self.current_page_is_tcvn3 = False
-                    
-                    # Apply Vietnamese-specific OCR error corrections
-                    page_text = self._fix_ocr_vietnamese(page_text)
-                    
-                    parsed_elements = self._parse_text_layout(page_text, page_num, source_file)
-                    elements.extend(parsed_elements)
-                except Exception as page_err:
-                    logger.warning(
-                        f"Error running OCR on page {page_num} of '{source_file}': {page_err}. "
-                        "Skipping page."
-                    )
+        batches = [page_images[i:i + pages_per_batch] for i in range(0, total_pages, pages_per_batch)]
+
+        delay_between_batches = float(os.getenv("OCR_DELAY_BETWEEN_BATCHES", "4"))
+
+        for batch_idx, batch in enumerate(batches):
+            page_start = batch[0][0]
+            page_end = batch[-1][0]
+            logger.info(f"Gemini Vision OCR batch {batch_idx + 1}/{len(batches)} (pages {page_start}-{page_end})...")
+
+            ocr_text = self._call_gemini_ocr(client, ocr_model, batch)
+            if not ocr_text:
+                logger.warning(f"Gemini Vision OCR returned empty for batch {batch_idx + 1}. Skipping.")
+                continue
+
+            # 3. Parse response theo marker === TRANG N ===
+            page_texts = self._parse_gemini_ocr_response(ocr_text, [p[0] for p in batch])
+
+            for page_num, page_text in page_texts.items():
+                if page_text.strip().startswith("[HÌNH ẢNH"):
                     continue
+                self.current_page_is_tcvn3 = False
+                parsed = self._parse_text_layout(page_text, page_num, source_file)
+                elements.extend(parsed)
+
+            # Delay giữa các batch để tránh rate limit (15 RPM free tier)
+            if batch_idx < len(batches) - 1:
+                time.sleep(delay_between_batches)
 
         return elements
+
+    def _render_pdf_to_images(self, file_path: str, dpi: int = 150) -> List[Tuple[int, bytes]]:
+        """Render tất cả trang PDF thành list[(page_num, jpeg_bytes)]."""
+        pages: List[Tuple[int, bytes]] = []
+
+        if pdfplumber is not None:
+            with pdfplumber.open(file_path) as pdf:
+                for page_idx, page in enumerate(pdf.pages):
+                    try:
+                        img = page.to_image(resolution=dpi).original
+                        buf = io.BytesIO()
+                        img.save(buf, format="JPEG", quality=85)
+                        pages.append((page_idx + 1, buf.getvalue()))
+                    except Exception as e:
+                        logger.warning(f"Failed to render page {page_idx + 1}: {e}")
+        else:
+            # Fallback: dùng PyMuPDF (fitz) nếu có
+            try:
+                import fitz
+                doc = fitz.open(file_path)
+                for i, page in enumerate(doc):
+                    mat = fitz.Matrix(dpi / 72, dpi / 72)
+                    pix = page.get_pixmap(matrix=mat)
+                    pages.append((i + 1, pix.tobytes("jpeg")))
+                doc.close()
+            except ImportError:
+                raise RuntimeError("Cần pdfplumber hoặc PyMuPDF (fitz) để render PDF thành ảnh.")
+
+        return pages
+
+    def _call_gemini_ocr(self, client, model_name: str, batch: List[Tuple[int, bytes]]) -> Optional[str]:
+        """Gửi 1 batch ảnh trang lên Gemini và nhận text OCR."""
+        page_nums = [p[0] for p in batch]
+
+        # Build multimodal content
+        contents = [f"Trích xuất text từ {len(batch)} trang PDF sau (trang {page_nums[0]} đến {page_nums[-1]}):"]
+
+        for page_num, img_bytes in batch:
+            contents.append(f"\n--- Trang {page_num} ---")
+            contents.append(types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"))
+
+        contents.append("\nTrả về text đã trích xuất, bắt đầu mỗi trang bằng === TRANG {n} ===")
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self._GEMINI_OCR_SYSTEM_PROMPT,
+                        temperature=0.1,
+                        max_output_tokens=8192,
+                    ),
+                )
+                if response.text:
+                    return response.text
+                logger.warning("Gemini Vision OCR returned empty response.")
+                return None
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = (attempt + 1) * 5
+                    err_str = str(e)
+                    err_str_upper = err_str.upper()
+                    if "429" in err_str_upper or "503" in err_str_upper or "EXHAUSTED" in err_str_upper:
+                        wait = max(wait, 15)
+                        # Try to parse recommended retry delay from Gemini API response
+                        import re
+                        match = re.search(r"Please retry in (\d+\.?\d*)s", err_str, re.IGNORECASE)
+                        if match:
+                            try:
+                                wait = int(float(match.group(1))) + 2
+                            except ValueError:
+                                pass
+                        else:
+                            match_delay = re.search(r"retrydelay'?:?\s*'?(\d+)", err_str, re.IGNORECASE)
+                            if match_delay:
+                                try:
+                                    wait = int(match_delay.group(1)) + 2
+                                except ValueError:
+                                    pass
+                    logger.warning(f"Gemini Vision OCR failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    logger.error(f"Gemini Vision OCR failed after {max_retries} attempts: {e}")
+                    return None
+        return None
+
+    def _parse_gemini_ocr_response(self, response: str, expected_pages: List[int]) -> dict:
+        """Parse Gemini OCR response theo marker === TRANG N ===, trả về {page_num: text}."""
+        result = {}
+        response = response.replace('\r\n', '\n')
+
+        # Strip markdown wrapper nếu có
+        text = response.strip()
+        if text.startswith("```"):
+            lines = text.split('\n')
+            if len(lines) > 1:
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = '\n'.join(lines)
+
+        for i, page_num in enumerate(expected_pages):
+            marker = f"=== TRANG {page_num} ==="
+            next_marker = f"=== TRANG {expected_pages[i + 1]} ===" if i + 1 < len(expected_pages) else None
+
+            start_idx = text.find(marker)
+            if start_idx == -1:
+                logger.warning(f"Marker for page {page_num} not found in Gemini OCR response. Skipping.")
+                continue
+
+            start_content = start_idx + len(marker)
+            if next_marker:
+                end_idx = text.find(next_marker, start_content)
+                if end_idx == -1:
+                    end_idx = len(text)
+            else:
+                end_idx = len(text)
+
+            result[page_num] = text[start_content:end_idx].strip()
+
+        return result
 
     def _parse_text_layout(self, text: Optional[str], page_num: int, source_file: str) -> List[ExtractedElement]:
         """
@@ -454,54 +597,6 @@ class PDFReader:
                     text = re.sub(r'^' + re.escape(wrong) + r'\b', correct, text)
                     text = re.sub(r'(?<=\.\s)' + re.escape(wrong) + r'\b', correct, text)
                     
-        return text
-
-    def _get_deepdoc_ocr(self):
-        """Lazily initialize and return the DeepDoc + VietOCR instance."""
-        if self._deepdoc_ocr is None:
-            import sys
-            
-            deepdoc_root = os.getenv("DEEPDOC_PATH")
-            if not deepdoc_root:
-                logger.error("DEEPDOC_PATH environment variable is not set in .env")
-                self._deepdoc_ocr = None
-                return None
-                
-            if not os.path.exists(deepdoc_root):
-                logger.error(f"DeepDoc root not found at the configured DEEPDOC_PATH: {deepdoc_root}")
-                self._deepdoc_ocr = None
-                return None
-                
-            if deepdoc_root not in sys.path:
-                sys.path.insert(0, deepdoc_root)
-                
-            try:
-                from module.ocr import OCR
-                
-                original_cwd = os.getcwd()
-                os.chdir(deepdoc_root)
-                try:
-                    self._deepdoc_ocr = OCR()
-                finally:
-                    os.chdir(original_cwd)
-                    
-            except Exception as e:
-                logger.error(f"Failed to load DeepDoc OCR: {e}")
-                self._deepdoc_ocr = None
-                
-        return self._deepdoc_ocr
-
-    def _fix_ocr_vietnamese(self, text: str) -> str:
-        """
-        Fixes common OCR misrecognitions for Vietnamese text.
-        Primary fix: 'v' misread as 'u' (e.g. 'uăn' -> 'văn').
-        Uses word-boundary-aware regex to avoid false positives.
-        """
-        if not text:
-            return text
-        patterns = self._get_ocr_patterns()
-        for pattern, replacement in patterns:
-            text = pattern.sub(replacement, text)
         return text
 
     def _tcvn3_to_unicode(self, text: str, force: bool = False) -> str:

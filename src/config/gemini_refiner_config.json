@@ -1,9 +1,0 @@
-{
-  "prompt_template": "Bạn là một chuyên gia hiệu đính văn bản tiếng Việt cho sách giáo khoa Ngữ Văn.\nHãy sửa các lỗi chính tả, lỗi OCR, và lỗi dấu tiếng Việt trong văn bản dưới đây.\n\nQUY TẮC BẮT BUỘC:\n1. CHỈ sửa lỗi chính tả và lỗi OCR. KHÔNG thêm, bớt, hoặc viết lại nội dung.\n2. Giữ nguyên cấu trúc: heading, paragraph, list items.\n3. Giữ nguyên tên riêng, tên tác phẩm, tên tác giả.\n4. Giữ nguyên thơ, đối thoại, trích dẫn y nguyên format gốc.\n5. Bạn MỘT CÁCH NGHIÊM NGẶT phải trả lại văn bản đã sửa với ĐÚNG số marker ===PAGE_N=== như input, và không được thay đổi các marker này.\n\nVĂN BẢN CẦN SỬA:\n{batch_text}",
-  "batch_size_pages": 5,
-  "max_tokens_per_batch": 4000,
-  "max_retries": 2,
-  "retry_delay_seconds": 2,
-  "delay_between_batches_seconds": 5,
-  "temperature": 0.1
-}

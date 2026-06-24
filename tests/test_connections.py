@@ -2,7 +2,7 @@ import sys
 import os
 
 
-sys.path.append("src")
+sys.path.insert(0, "src")
 
 import pytest
 from db.mongo_client import connect_to_mongo, close_mongo_connection
