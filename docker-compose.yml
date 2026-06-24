@@ -37,14 +37,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-    # GPU (tùy chọn): bỏ comment nếu máy có NVIDIA + nvidia-container-toolkit.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+     #GPU (tùy chọn): bỏ comment nếu máy có NVIDIA + nvidia-container-toolkit.
+    deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: all
+             capabilities: [gpu]
 
   # Pull sẵn model vào Ollama (chạy 1 lần rồi thoát).
   ollama-init:
