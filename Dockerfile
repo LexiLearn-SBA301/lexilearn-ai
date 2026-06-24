@@ -15,6 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# torch/torchvision bản CPU (~200MB) thay vì bản CUDA (~2.5GB): container app
+# KHÔNG được cấp GPU trong docker-compose (chỉ ollama có) nên CUDA torch là tải thừa.
+# Cài trước để vietocr/torchvision dùng lại, không kéo nvidia-* về.
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt
 
 COPY . .
