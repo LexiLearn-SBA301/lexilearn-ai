@@ -747,16 +747,17 @@ class PDFReader:
         """
         Heuristic to detect if a line is a Heading in Vietnamese textbook materials.
         """
-        if not line or len(line) > 120:
+        if not line or len(line) > 150:
             return False
 
         has_letters = any(c.isalpha() for c in line)
         if has_letters:
             # Check if mostly uppercase (at least 75% of letters are uppercase)
-            # This handles OCR noise at the end of lines (e.g. "RA-MA BUỘC TỘI va v‹")
-            letters = [c for c in line if c.isalpha()]
+            # Exclude content in parentheses when checking uppercase ratio
+            line_no_parens = re.sub(r'\(.*?\)', '', line)
+            letters = [c for c in line_no_parens if c.isalpha()]
             upper_letters = [c for c in letters if c.isupper()]
-            if len(upper_letters) / len(letters) >= 0.75:
+            if letters and len(upper_letters) / len(letters) >= 0.75:
                 return True
 
         if re.match(r'^[IVXLCDM]+\.?\s+', line):

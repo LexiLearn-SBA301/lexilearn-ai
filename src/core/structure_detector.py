@@ -93,10 +93,13 @@ class StructureDetector:
         if "nhà xuất bản" in lower_text or "bộ giáo dục" in lower_text:
             return False
             
+        # Strip parenthesis for uppercase check
+        text_no_parens = re.sub(r'\(.*?\)', '', text).strip()
+            
         if (
-            len(text) <= 80
-            and text.isupper()
-            and any(c.isalpha() for c in text)
+            len(text) <= 150
+            and text_no_parens.isupper()
+            and any(c.isalpha() for c in text_no_parens)
             and not (
                 self._is_roman_heading(text)
                 or self._is_numbered_heading(text)

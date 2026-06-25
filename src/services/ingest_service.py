@@ -66,7 +66,8 @@ class IngestService:
         import json
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
-        self.known_authors = config["known_authors"]
+        self.known_authors = config.get("known_authors", {})
+        self.work_to_author = config.get("work_to_author", {})
         
         logger.info("IngestService initialized successfully.")
 
@@ -158,6 +159,8 @@ class IngestService:
             return "", "Bộ Giáo Dục và Đào Tạo"
             
         upper_title = title.upper()
+        
+        # 1. Try to extract explicit author from title (e.g. "TITLE - AUTHOR")
         for raw_auth, clean_auth in self.known_authors.items():
             pattern = rf"\s*[\s_\-\—\–:]+\s*{re.escape(raw_auth)}\s*$"
             pattern_space = rf"\s+{re.escape(raw_auth)}\s*$"
@@ -169,6 +172,13 @@ class IngestService:
                 cleaned_title = re.sub(pattern_space, "", title, flags=re.IGNORECASE).strip()
                 return cleaned_title, clean_auth
                 
+        # 2. If no explicit author suffix, lookup the cleaned title in the work_to_author map
+        # Strip parens and normalize to match dictionary keys
+        title_no_parens = re.sub(r'\(.*?\)', '', title).strip().lower()
+        if title_no_parens in self.work_to_author:
+            return title, self.work_to_author[title_no_parens]
+            
+        # 3. Fallback to default
         return title, "Bộ Giáo Dục và Đào Tạo"
 
 
