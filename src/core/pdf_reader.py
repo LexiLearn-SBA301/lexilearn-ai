@@ -328,8 +328,10 @@ class PDFReader:
                 )
                 if response.text:
                     return response.text
-                logger.warning("Gemini Vision OCR returned empty response.")
-                return None
+                
+                # If we get here, response.text is empty or None
+                # Raise an exception to trigger the retry logic
+                raise ValueError(f"Gemini Vision OCR returned empty response. Safety ratings: {getattr(response, 'prompt_feedback', 'N/A')}")
             except Exception as e:
                 if attempt < max_retries - 1:
                     wait = (attempt + 1) * 5
