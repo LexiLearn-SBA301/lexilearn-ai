@@ -11,6 +11,7 @@ import logging
 
 from langgraph.graph import END, START, StateGraph
 
+from graph.finalize import finalize
 from agents.mocks import deep_node, factual_node
 from agents.supervisor import supervisor
 from state.agent_state import AgentState
@@ -30,6 +31,7 @@ def build_graph(checkpointer=None):
     g.add_node("supervisor", supervisor)
     g.add_node("factual", factual_node)
     g.add_node("deep", deep_node)
+    g.add_node("finalize", finalize)
 
     g.add_edge(START, "supervisor")
     g.add_conditional_edges(
@@ -37,7 +39,8 @@ def build_graph(checkpointer=None):
         _route_from_state,
         {"factual": "factual", "deep": "deep"},
     )
-    g.add_edge("factual", END)
-    g.add_edge("deep", END)
+    g.add_edge("factual", "finalize")
+    g.add_edge("deep", "finalize")
+    g.add_edge("finalize", END)
 
     return g.compile(checkpointer=checkpointer)

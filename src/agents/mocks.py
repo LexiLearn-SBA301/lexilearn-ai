@@ -22,7 +22,6 @@ def factual_node(state: AgentState) -> dict:
         ),
         "current_stage": Stage.FACTUAL,
         "current_node": "factual",
-        "status": "done",
     }
 
 
@@ -34,7 +33,6 @@ def deep_node(state: AgentState) -> dict:
             title="[MOCK] Bài phân tích",
             full_text=f"[MOCK deep] phân tích sâu cho: {query}",
         ),
-        "current_stage": Stage.DONE,
+        "current_stage": Stage.WRITE_ESSAY,
         "current_node": "deep",
-        "status": "done",
     }
