@@ -13,7 +13,7 @@ load_dotenv()
 # Add src folder to sys.path
 sys.path.insert(0, "src")
 from db.mongo_client import connect_to_mongo, close_mongo_connection
-from db.checkpointer import get_checkpointer
+from db.checkpointer import get_checkpointer, close_checkpointer
 from api.chat_router import router as chat_router
 from api.exception_handlers import register_exception_handlers
 from services.agent_service.workflow_service import WorkflowService
@@ -24,11 +24,13 @@ async def lifespan(app: FastAPI):
     # Establish MongoDB connection when starting FastAPI server
     connect_to_mongo()
     # Dựng WorkflowService 1 lần ở startup, kèm Redis checkpointer (persist/resume theo thread_id).
-    app.state.workflow = WorkflowService(checkpointer=get_checkpointer())
+    checkpointer = get_checkpointer()
+    app.state.workflow = WorkflowService(checkpointer=checkpointer)
     app.state.chat_svc = OllamaChatService()
     yield
     # Close connection when stopping
     close_mongo_connection()
+    close_checkpointer(checkpointer)
 
 app = FastAPI(
     title="RAG Service",
