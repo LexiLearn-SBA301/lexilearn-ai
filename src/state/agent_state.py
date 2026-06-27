@@ -17,7 +17,9 @@ Quan hệ cần nhớ:
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, Literal, Optional, TypedDict
+from typing import Annotated, Any, Literal, Optional
+
+from typing_extensions import TypedDict  # Pydantic <3.12 yêu cầu (Docker chạy Python 3.11)
 
 from langgraph.graph.message import add_messages
 

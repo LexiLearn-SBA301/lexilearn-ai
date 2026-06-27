@@ -1,4 +1,5 @@
 import sys
+
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 from contextlib import asynccontextmanager
@@ -12,15 +13,24 @@ load_dotenv()
 # Add src folder to sys.path
 sys.path.insert(0, "src")
 from db.mongo_client import connect_to_mongo, close_mongo_connection
+from db.checkpointer import get_checkpointer, close_checkpointer
 from api.chat_router import router as chat_router
+from api.exception_handlers import register_exception_handlers
+from services.agent_service.workflow_service import WorkflowService
+from services.agent_service.chat_service import OllamaChatService
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Establish MongoDB connection when starting FastAPI server
     connect_to_mongo()
+    # Dựng WorkflowService 1 lần ở startup, kèm Redis checkpointer (persist/resume theo thread_id).
+    checkpointer = get_checkpointer()
+    app.state.workflow = WorkflowService(checkpointer=checkpointer)
+    app.state.chat_svc = OllamaChatService()
     yield
     # Close connection when stopping
     close_mongo_connection()
+    close_checkpointer(checkpointer)
 
 app = FastAPI(
     title="RAG Service",
@@ -40,6 +50,9 @@ app.add_middleware(
 
 # Đăng ký các router API (tầng route nằm trong src/api/)
 app.include_router(chat_router)
+
+# Đăng ký exception handlers tập trung (map domain exception -> HTTP), khác java không có container phải tự đăng ký
+register_exception_handlers(app)
 
 @app.get("/")
 def read_root():
