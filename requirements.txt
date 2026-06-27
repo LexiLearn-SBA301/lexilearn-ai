@@ -8,6 +8,7 @@ langchain
 langchain-mongodb
 langchain-ollama
 langgraph
+langgraph-checkpoint-redis
 pdfplumber
 PyPDF2
 vietnamese

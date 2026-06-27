@@ -18,7 +18,7 @@ def test_route_from_state():
 
 def _run_with_route(route: Route) -> dict:
     """Ép supervisor ra 1 route cố định rồi chạy graph (không cần Gemini key)."""
-    with patch("graph.supervisor._classify",
+    with patch("agents.supervisor._classify",
                return_value=_Decision(route=route, reasoning="test")):
         app = build_graph()  # không checkpointer -> đủ test routing
         return app.invoke(init_state("câu hỏi test", "t1", "r1"))
