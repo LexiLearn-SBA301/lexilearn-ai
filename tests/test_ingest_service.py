@@ -11,7 +11,6 @@ from services.ingest_service import IngestService
 
 
 def _make_mock_chunk(chunk_id="chunk_1"):
-    """Helper to create a mock chunk."""
     mock_chunk = MagicMock()
     mock_chunk.chunk_id = chunk_id
     mock_chunk.content = "Content"
@@ -22,6 +21,17 @@ def _make_mock_chunk(chunk_id="chunk_1"):
     mock_chunk.has_overlap = False
     mock_chunk.tags = []
     mock_chunk.section_title = "Title"
+    
+    mock_metadata = MagicMock()
+    mock_metadata.ten_tac_pham = "Test Title"
+    mock_metadata.tac_gia = "Test Author"
+    mock_metadata.lop = 12
+    mock_metadata.hoc_ki = 1
+    mock_metadata.the_loai = "prose"
+    mock_metadata.nam_sang_tac = 2024
+    mock_metadata.is_biography = False
+    mock_chunk.metadata = mock_metadata
+    
     return mock_chunk
 
 
