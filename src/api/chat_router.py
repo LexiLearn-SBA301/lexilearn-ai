@@ -7,7 +7,7 @@ Mục đích: Cung cấp API cho FE truy vấn hệ thống RAG và tùy chọn 
 import logging
 from typing import Any, List, Optional, Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
@@ -17,8 +17,14 @@ logger = logging.getLogger("rag-service.api.chat")
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# Singleton RAGService for API
-rag_service = RAGService()
+# Singleton RAGService for API (Lazy initialization)
+_rag_service: Optional[RAGService] = None
+
+def get_rag_service() -> RAGService:
+    global _rag_service
+    if _rag_service is None:
+        _rag_service = RAGService()
+    return _rag_service
 
 class ChatRequest(BaseModel):
     message: str
@@ -31,7 +37,7 @@ class ChatResponse(BaseModel):
     sources: List[Any] = []
 
 @router.post("/only-llm", response_model=ChatResponse)
-def chat_finetuned(req: ChatRequest) -> ChatResponse:
+def chat_finetuned(req: ChatRequest, rag_service: RAGService = Depends(get_rag_service)) -> ChatResponse:
     """Chat với model FINE-TUNE + hệ thống RAG."""
     logger.info("RAG query -> model %s", FINE_TUNED_OLLAMA_LLM_MODEL)
     result = rag_service.query(query=req.message, filters=req.filters, limit=req.limit, model_name=FINE_TUNED_OLLAMA_LLM_MODEL)
@@ -42,7 +48,7 @@ def chat_finetuned(req: ChatRequest) -> ChatResponse:
     )
 
 @router.post("/base-llm", response_model=ChatResponse)
-def chat_base(req: ChatRequest) -> ChatResponse:
+def chat_base(req: ChatRequest, rag_service: RAGService = Depends(get_rag_service)) -> ChatResponse:
     """Chat với model GỐC + hệ thống RAG để so sánh."""
     logger.info("RAG query -> model %s", OLLAMA_BASE_LLM_MODEL)
     result = rag_service.query(query=req.message, filters=req.filters, limit=req.limit, model_name=OLLAMA_BASE_LLM_MODEL)
