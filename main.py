@@ -92,6 +92,11 @@ if __name__ == "__main__":
         type=str,
         help="Bộ lọc tên tác phẩm văn học khi truy vấn."
     )
+    parser.add_argument(
+        "--use-llm-corrector",
+        action="store_true",
+        help="Bật tính năng sửa lỗi font/OCR bằng Gemini AI trước khi chunking."
+    )
 
     args = parser.parse_args()
 
@@ -104,7 +109,7 @@ if __name__ == "__main__":
         
         try:
             service = IngestService()
-            job_id = service.start_ingestion(args.pdf)
+            job_id = service.start_ingestion(args.pdf, use_llm_corrector=args.use_llm_corrector)
             print(f"Đã khởi tạo Job nạp dữ liệu bất đồng bộ thành công.")
             print(f"Mã Job ID: {job_id}")
             print("Đang chạy ngầm và theo dõi tiến độ, vui lòng không tắt CMD...")

@@ -27,7 +27,11 @@ class SemanticChunk:
     char_count: int
     has_overlap: bool
     overlap_from_chunk: Optional[str]
-
+    # Metadata extracted by AI Analyzer
+    ten_tac_pham: Optional[str] = None
+    tac_gia: Optional[str] = None
+    is_biography: bool = False
+    nam_sang_tac: Optional[int] = None
 
 class SemanticChunker:
     """
