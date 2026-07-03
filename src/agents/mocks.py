@@ -42,6 +42,4 @@ def deep_node(state: AgentState, rag_service) -> dict:
         word_count=30,
     )
     result["essay"] = mock_essay
-    result["current_stage"] = Stage.WRITE_ESSAY
-    result["current_node"] = "write_essay"
     return result

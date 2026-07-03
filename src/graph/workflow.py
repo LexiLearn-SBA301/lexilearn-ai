@@ -37,7 +37,6 @@ def build_graph(checkpointer=None, rag_service=None):
     g.add_node("factual", factual_node)
     g.add_node("deep", partial(deep_node, rag_service=rag_service))
     g.add_node("finalize", finalize)
-    g.add_node("load_mock", load_mock)   # MOCK TẠM thay Tool 1 -> xóa khi Tool 1 thật xong
     g.add_node("debate", critics_debate)
     g.add_node("supervisor_judge_debate", judge_node)
     g.add_edge(START, "supervisor")
@@ -54,8 +53,7 @@ def build_graph(checkpointer=None, rag_service=None):
     #     _route_supervisor_judge_query,
     #     {"query": "query", "next": "debate"},
     # )
-    g.add_edge("deep", "load_mock")   # MOCK TẠM thay Tool 1 -> nối thẳng "deep" -> "debate" khi Tool 1 thật xong
-    g.add_edge("load_mock", "debate")
+    g.add_edge("deep", "debate")   # MOCK TẠM thay Tool 1 -> nối thẳng "deep" -> "debate" khi Tool 1 thật xong
     g.add_edge("debate", "supervisor_judge_debate")
     g.add_conditional_edges(
         "supervisor_judge_debate",
