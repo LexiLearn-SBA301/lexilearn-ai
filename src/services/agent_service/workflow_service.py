@@ -16,6 +16,7 @@ from typing import Any, Optional
 
 from graph.workflow import build_graph
 from state.agent_state import AgentState, init_state
+from services.rag_service import RAGService
 
 logger = logging.getLogger("rag-service.services.workflow")
 
@@ -25,10 +26,11 @@ class WorkflowService:
 
     def __init__(self, checkpointer: Optional[Any] = None) -> None:
         # build 1 lần lúc khởi tạo, KHÔNG compile lại mỗi request
-        self.app = build_graph(checkpointer)
+        self.rag_service = RAGService()
+        self.app = build_graph(checkpointer, rag_service=self.rag_service)
         logger.info("WorkflowService sẵn sàng (persist=%s).", checkpointer is not None)
 
-    def invoke(self, human_message: str, thread_id: str,
+    async def invoke(self, human_message: str, thread_id: str,
                run_id: Optional[str] = None) -> AgentState:
         """Chạy graph 1 lượt -> trả state cuối.
 
@@ -39,4 +41,9 @@ class WorkflowService:
         state = init_state(human_message, thread_id=thread_id, run_id=run_id)
         config = {"configurable": {"thread_id": thread_id}}
         logger.info("Invoke workflow thread=%s run=%s", thread_id, run_id)
-        return self.app.invoke(state, config=config)
+        try:
+            return await self.app.ainvoke(state, config=config)
+        except Exception as e:
+            logger.exception("Workflow failed thread=%s run=%s", thread_id, run_id)
+            state["status"] = "failed"
+            raise

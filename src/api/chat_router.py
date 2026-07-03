@@ -6,12 +6,12 @@ Phần truy hồi ngữ cảnh (RAG) nằm ở RAGService; router này cố tìn
 """
 
 from fastapi import APIRouter, Depends
-from schemas.chat_schema import ChatRequest, ChatResponse
+from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
 from services.agent_service.chat_service import OllamaChatService
 from services.agent_service.workflow_service import WorkflowService
 from api.dependencies import get_workflow, get_chat_svc
-from state.agent_state import AgentState
+import uuid
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -27,8 +27,12 @@ def chat_base(req: ChatRequest,  chat_service: OllamaChatService = Depends(get_c
     """Chat với model GỐC (chưa fine-tune) để so sánh. Cần đã pull base model trước."""
     return chat_service.run_chat(req, OLLAMA_BASE_LLM_MODEL)
 
-@router.post("/llm-extended", response_model=AgentState)
-def chat_with_workflow(req: ChatRequest, wf: WorkflowService = Depends(get_workflow)) -> AgentState:
+@router.post("/llm-extended", response_model=WorkflowResponse)
+async def chat_with_workflow(req: ChatRequest, wf: WorkflowService = Depends(get_workflow)) -> WorkflowResponse:
     """Chat với model FINE-TUNE kèm workflow Multi Agent."""
-    return wf.invoke(req.message, "mock_thread_id")
+    thread_id = req.thread_id if req.thread_id else uuid.uuid4().hex
+    state = await wf.invoke(req.message, thread_id)
+    final_ai_response = state.get("final_ai_response", "")
+    route = state.get("route", "")
+    return WorkflowResponse(answer=final_ai_response, route=route)
 #Depends() ==  @Autowired
