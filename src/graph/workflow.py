@@ -15,7 +15,7 @@ from functools import partial
 from agents.critics_debate import critics_debate
 from agents.supervisor_judge import judge_node
 from graph.finalize import finalize
-from agents.mocks import factual_node
+from agents.factual_node import factual_node
 from agents.supervisor import supervisor
 from agents.prepare_context import prepare_context
 from agents.write_essay import write_essay
@@ -48,7 +48,7 @@ def build_graph(checkpointer=None, rag_service=None):
     """Dựng & compile graph. checkpointer=None -> chạy được nhưng không persist."""
     g = StateGraph(AgentState)
     g.add_node("supervisor", supervisor)
-    g.add_node("factual", factual_node)
+    g.add_node("factual", partial(factual_node, rag_service=rag_service))
     
     # 1. Prepare Context (Tool 1) + Judge
     g.add_node("prepare_context", partial(prepare_context, rag_service=rag_service))
