@@ -32,7 +32,11 @@ def finalize(state: AgentState) -> dict:
     # Kiểu 1: dispatch theo route -> biết answer (+ citations/sources) nằm field nào.
     if route == Route.DEEP:
         essay = state.get("essay")
-        answer = essay.full_text if essay else ""
+        if essay:
+            answer = essay.full_text
+        else:
+            ctx = state.get("context")
+            answer = ctx.summary if ctx else "[Chưa có kết quả phân tích]"
         citations = essay.citations if essay else []
         sources = []
     else:  # FACTUAL (mặc định / fallback)

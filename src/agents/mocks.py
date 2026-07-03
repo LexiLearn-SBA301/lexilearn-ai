@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from state.agent_state import AgentState
 from state.state_schema import EssayDraft, FactualResult, Stage
+from agents.prepare_context import prepare_context
 
 
 def factual_node(state: AgentState) -> dict:
@@ -25,14 +26,22 @@ def factual_node(state: AgentState) -> dict:
     }
 
 
-def deep_node(state: AgentState) -> dict:
-    """[MOCK] Deep pipeline (context -> debate -> essay) gộp 1 node tạm."""
+def deep_node(state: AgentState, rag_service) -> dict:
+    """gọi hàm prepare_context và mock ra một bài luận (essay)"""
+    # 1. Chạy prepare_context thật
+    result = prepare_context(state, rag_service)
+    
+    # 2. Điền phần mock essay để pipeline hoàn thiện
     query = state.get("human_message", "")
-    return {
-        "essay": EssayDraft(
-            title="[MOCK] Bài phân tích",
-            full_text=f"[MOCK deep] phân tích sâu cho: {query}",
-        ),
-        "current_stage": Stage.WRITE_ESSAY,
-        "current_node": "deep",
-    }
+    ctx = result.get("context")
+    summary = ctx.summary if ctx else ""
+    
+    mock_essay = EssayDraft(
+        title=f"Phân tích: {query}",
+        full_text=f"[MOCK deep] Bài luận phân tích chi tiết cho: {query}\n\nContext summary: {summary}",
+        word_count=30,
+    )
+    result["essay"] = mock_essay
+    result["current_stage"] = Stage.WRITE_ESSAY
+    result["current_node"] = "write_essay"
+    return result

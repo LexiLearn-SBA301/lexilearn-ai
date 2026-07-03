@@ -15,9 +15,10 @@ Quy ước thiết kế:
 from __future__ import annotations
 
 import operator
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional, TypedDict
+from typing import Annotated, Any, Literal, Optional
+from typing_extensions import TypedDict
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -148,7 +149,7 @@ class FactualResult(BaseModel):
 
 class Entity(BaseModel):
     name: str
-    type: Literal["character", "place", "theme", "motif", "event", "other"]
+    type: str
     description: str = ""
     mentions: list[str] = Field(default_factory=list)   # chunk_id liên quan
 
@@ -382,7 +383,7 @@ class EventEmitter:
         return {"events": emitter.milestones, "event_seq": emitter.seq, ...}
     """
 
-    def __init__(self, state: GraphState, writer=None):
+    def __init__(self, state: dict, writer=None):
         self.seq = state.get("event_seq", 0)
         self.writer = writer            # hàm đẩy ra ngoài (SSE/WS). None = không stream.
         self.milestones: list[StreamEvent] = []
@@ -402,7 +403,7 @@ class EventEmitter:
     def thinking(self, node: str, content: str, actor: str = "") -> None:
         self.emit(
             StreamEvent(seq=self._next(), type=EventType.THINKING, node=node,
-                        actor=actor, content=content, ts=datetime.utcnow()),
+                        actor=actor, content=content, ts=datetime.now(timezone.utc)),
             persist=True,
         )
 
@@ -410,7 +411,7 @@ class EventEmitter:
         # token-level: stream dở, KHÔNG persist (tránh phình state)
         self.emit(
             StreamEvent(seq=self._next(), type=EventType.TOKEN, node=node,
-                        content=text, is_partial=True, ts=datetime.utcnow()),
+                        content=text, is_partial=True, ts=datetime.now(timezone.utc)),
             persist=False,
         )
 
@@ -419,6 +420,6 @@ class EventEmitter:
             StreamEvent(seq=self._next(), type=EventType.JUDGE, node=node,
                         actor="Giám khảo", content=verdict.reasoning,
                         payload={"verdict": verdict.verdict, "scores": verdict.scores},
-                        ts=datetime.utcnow()),
+                        ts=datetime.now(timezone.utc)),
             persist=True,
         )

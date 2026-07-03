@@ -11,6 +11,7 @@ import logging
 
 from langgraph.graph import END, START, StateGraph
 
+from functools import partial
 from graph.finalize import finalize
 from agents.mocks import deep_node, factual_node
 from agents.supervisor import supervisor
@@ -25,12 +26,12 @@ def _route_from_state(state: AgentState) -> str:
     return "deep" if state.get("route") == Route.DEEP else "factual"
 
 
-def build_graph(checkpointer=None):
+def build_graph(checkpointer=None, rag_service=None):
     """Dựng & compile graph. checkpointer=None -> chạy được nhưng không persist."""
     g = StateGraph(AgentState)
     g.add_node("supervisor", supervisor)
     g.add_node("factual", factual_node)
-    g.add_node("deep", deep_node)
+    g.add_node("deep", partial(deep_node, rag_service=rag_service))
     g.add_node("finalize", finalize)
 
     g.add_edge(START, "supervisor")

@@ -1,13 +1,9 @@
 import os
 import logging
-from dotenv import load_dotenv
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
 
 logger = logging.getLogger("rag-service.ollama")
-logging.basicConfig(level=logging.INFO)
-
-load_dotenv()
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
