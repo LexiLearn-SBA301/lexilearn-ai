@@ -25,7 +25,7 @@ async def _llm_service_error(request: Request, exc: LLMServiceError) -> JSONResp
 async def _global_fallback_error(request: Request, exc: Exception) -> JSONResponse:
     # LƯỚI VÉT: Lỗi không xác định (Bugs, Null, Out of Memory...) -> 500
     # Ghi log chi tiết lỗi để Dev sửa, nhưng chỉ báo user là "Lỗi hệ thống"
-    logger.error(f"Lỗi hệ thống chưa được kiểm soát: {exc}", exc_info=True)
+    logger.error("Lỗi hệ thống chưa được kiểm soát: %s", exc, exc_info=True)
     return JSONResponse(status_code=500, content={"detail": "Hệ thống đang gặp sự cố bất ngờ."})
 
 def register_exception_handlers(app: FastAPI) -> None:

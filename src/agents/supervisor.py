@@ -14,14 +14,11 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from providers.gemini_provider import gemini_provider
 from state.agent_state import AgentState
 from state.state_schema import CriticRole, IntentAnalysis, Route, Stage
-
-load_dotenv()
 
 logger = logging.getLogger("rag-service.graph.supervisor")
 
