@@ -342,6 +342,10 @@ class GraphState(TypedDict, total=False):
     retry_counts: Annotated[dict[str, int], merge_dict]   # {"prepare_context":1, ...}
     retry_limits: dict[str, int]                          # cấu hình: vd {"write_essay":1}
     last_feedback: Annotated[dict[str, str], merge_dict]  # feedback judge -> tool đọc khi retry
+    # bản TỐT NHẤT từng thấy qua các lần retry (key theo stage) -> khi hết lượt retry,
+    # dùng bản này thay vì bản cuối cùng (có thể tệ hơn) hoặc báo lỗi cứng.
+    # vd: {"critics_debate": {"output": DebateState(...), "score": 0.8}}
+    best_attempts: Annotated[dict[str, dict], merge_dict]
 
     # --- output ---
     final_output: Annotated[Optional[FinalOutput], take_last]

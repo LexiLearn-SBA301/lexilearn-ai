@@ -17,6 +17,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+from providers.gemini_provider import gemini_provider
 from state.agent_state import AgentState
 from state.state_schema import CriticRole, IntentAnalysis, Route, Stage
 
@@ -51,24 +52,9 @@ class _Decision(BaseModel):
     reasoning: str = ""
 
 
-_client = None
-
-
-def _get_client():
-    """Lazy-init genai.Client; trả None nếu thiếu API key."""
-    global _client # trỏ tới biến toàn cục bên ngoài để sài (khác java)
-    if _client is not None:
-        return _client
-    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
-    if not api_key:
-        return None
-    from google import genai
-    _client = genai.Client(api_key=api_key)
-    return _client
-
 def _classify(query: str) -> _Decision:
     """Gọi Gemini phân loại route. Mọi sự cố -> fallback route=factual."""
-    client = _get_client()
+    client = gemini_provider.get_client()
     if client is None:
         logger.warning("Thiếu GEMINI_API_KEY -> fallback route=factual.")
         return _Decision(route=Route.FACTUAL,

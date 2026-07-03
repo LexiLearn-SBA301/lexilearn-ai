@@ -43,6 +43,7 @@ from state.state_schema import (
     CriticRole,
     CriticTurn,
     DebateState,
+    PreparedContext,
     Rebuttal,
     SourceChunk,
     Stage,
@@ -70,6 +71,7 @@ class DebateSubState(TypedDict, total=False):
     author: Optional[str]
     context_summary: str
     chunks: list[SourceChunk]        # đoạn văn bản CHUNG (từ Tool 1) cho cả 4 critic
+    judge_feedback: str               # feedback của supervisor_judge lượt RETRY trước (rỗng nếu lần đầu)
     # 4 node ghi song song -> cần reducer merge_dict
     round1: Annotated[dict[CriticRole, CriticTurn], merge_dict]
     round2: Annotated[dict[CriticRole, CriticTurn], merge_dict]
@@ -146,6 +148,7 @@ def build_r1_prompt(
     author: str | None,
     context_summary: str,
     chunks: list[SourceChunk],
+    judge_feedback: str = "",
 ) -> str:
     """Human prompt vòng 1: critic đọc đoạn văn bản chung + tóm tắt Tool 1 rồi nêu luận điểm."""
     display = CRITIC_DISPLAY[role]
@@ -154,8 +157,18 @@ def build_r1_prompt(
         header += f" — Tác giả: {author}"
     ctx = (context_summary or "").strip()
     ctx_block = f"\nTóm tắt ngữ cảnh đã chuẩn bị:\n{ctx}\n" if ctx else ""
+    fb = (judge_feedback or "").strip()
+    # Feedback là 1 chuỗi CHUNG cho cả debate (không tách theo từng critic) -> phải
+    # cảnh báo rõ "chỉ áp dụng nếu đúng với phần của bạn" để 3 critic KHÔNG liên quan
+    # không tự suy diễn lỗi hoặc lấn sang chuyên môn khác (tránh ảo giác).
+    fb_block = (
+        f"\nGóp ý của giám khảo ở lượt debate TRƯỚC (lượt này bị yêu cầu làm lại):\n{fb}\n"
+        f"Chỉ điều chỉnh nếu góp ý trên ĐÚNG với phần việc của bạn ({display}); nếu không "
+        f"liên quan tới góc nhìn của bạn thì bỏ qua, KHÔNG tự suy diễn thêm lỗi hoặc sửa "
+        f"sang chuyên môn khác.\n"
+    ) if fb else ""
     return (
-        f"{header}\n{ctx_block}\n"
+        f"{header}\n{ctx_block}{fb_block}\n"
         f"Các đoạn văn bản gốc (dùng làm dẫn chứng):\n"
         f"{_render_chunks(chunks)}\n\n"
         f"Nhiệm vụ ({display}):\n"
@@ -217,6 +230,7 @@ def _speak_r1(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
             state.get("author"),
             state.get("context_summary", ""),
             state.get("chunks", []),
+            state.get("judge_feedback", ""),
         )),
     ]
     try:
@@ -346,6 +360,10 @@ def build_debate_subgraph(llm):
     g = StateGraph(DebateSubState)
     for role in CRITIC_ORDER:
         g.add_node(f"{role.value}_r1", make_r1_node(role, llm))
+        # gọi wapper trong waper trả về (return _node) chính là địa chỉ của hàm
+        # giống  g.add_node("supervisor", supervisor)
+        # make_r1_node(role, llm) ở đây thực chất là 1 lệnh thực thi hàm chứ không phải là lưu địa chỉ cho LangGraph gọi
+        # và LangGraph chỉ nhận địa chỉ của hàm có tham số truyền vào duy nhất là State
     g.add_node("bulletin", bulletin_node)
     for role in CRITIC_ORDER:
         g.add_node(f"{role.value}_r2", make_r2_node(role, llm))
@@ -369,7 +387,9 @@ def _prod_subgraph():
     global _PROD_APP
     if _PROD_APP is None:
         from providers.ollama_provider import ollama_provider
-        _PROD_APP = build_debate_subgraph(ollama_provider.get_llm())
+        # temperature > 0 (thay vì 0.0 mặc định) để retry (feedback giám khảo) không
+        # sinh ra output y hệt lần trước; chỉ áp dụng ở đây, không đụng factual/chat.
+        _PROD_APP = build_debate_subgraph(ollama_provider.get_llm(temperature=0.3))
     return _PROD_APP
 
 
@@ -391,11 +411,13 @@ def critics_debate(state, *, subgraph=None) -> dict:
     """
     intent = state.get("intent")
     context = state.get("context")
+    judge_feedback = (state.get("last_feedback") or {}).get(Stage.CRITICS_DEBATE.value, "")
     sub_in: DebateSubState = {
         "work_title": getattr(intent, "work_title", None),
         "author": getattr(intent, "author", None),
         "context_summary": getattr(context, "summary", "") or "",
         "chunks": _chunks_from_context(context),
+        "judge_feedback": judge_feedback,
         "round1": {}, "round2": {}, "bulletin": [],
         "consensus_points": [], "contested_points": [],
     }
@@ -418,3 +440,53 @@ def critics_debate(state, *, subgraph=None) -> dict:
         "current_stage": Stage.CRITICS_DEBATE,
         "current_node": "critics_debate",
     }
+
+
+# =============================================================================
+# MOCK TẠM — thay Tool 1 (prepare_context) lúc chưa ráp xong thật, để test
+# critics_debate với context có nội dung (thay vì context=None -> chunks=[]).
+# XÓA hàm này (và mọi chỗ gọi nó) khi Tool 1 thật đã sẵn sàng.
+# =============================================================================
+
+def load_mock(state) -> dict:
+    """[MOCK TẠM] Giả lập output Tool 1 -> set state['context'] có vài đoạn văn
+    bản mẫu để 4 critic có dẫn chứng thật khi test, thay vì '(không có đoạn văn
+    bản nào)'."""
+    chunks = [
+        SourceChunk(
+            chunk_id="mock-c1",
+            text=(
+                "Hắn về đến nhà, dắt theo một người đàn bà nữa. Mấy đứa trẻ con "
+                "thấy lạ vội chạy ra reo lên: 'anh Tràng ơi, chông vợ hài!'."
+            ),
+            source_ref="Vợ Nhặt (Kim Lân), đoạn mở đầu",
+        ),
+        SourceChunk(
+            chunk_id="mock-c2",
+            text=(
+                "Bà cụ Tứ nhìn người đàn bà, lòng đầy thương xót. 'Ừ, thôi thì "
+                "các con đã phải duyên phải kiếp với nhau, u cũng mừng lòng'."
+            ),
+            source_ref="Vợ Nhặt (Kim Lân), đoạn bà cụ Tứ",
+        ),
+        SourceChunk(
+            chunk_id="mock-c3",
+            text=(
+                "Sáng hôm sau, Tràng dậy thấy nhà cửa sạch sẽ, sân vườn quang "
+                "quẻ. Trong lòng hắn thấy êm ái lửng lơ như người vừa ở giấc mơ ra."
+            ),
+            source_ref="Vợ Nhặt (Kim Lân), đoạn buổi sáng hôm sau",
+        ),
+    ]
+    context = PreparedContext(
+        retrieval_query="[mock] Vợ Nhặt - Kim Lân",
+        chunks=chunks,
+        summary=(
+            "Tràng nhặt được vợ giữa nạn đói, đưa về ra mắt mẹ; sáng hôm sau cả "
+            "nhà cảm nhận sự đổi khác, tràn hy vọng dù đói khổ vẫn vây quanh."
+        ),
+        themes=["nạn đói", "khát vọng sống", "tình người"],
+        token_count=sum(len(c.text) for c in chunks),
+        retrieved_at=_now(),
+    )
+    return {"context": context}
