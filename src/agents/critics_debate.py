@@ -43,7 +43,6 @@ from state.state_schema import (
     CriticRole,
     CriticTurn,
     DebateState,
-    PreparedContext,
     Rebuttal,
     SourceChunk,
     Stage,
@@ -440,53 +439,3 @@ def critics_debate(state, *, subgraph=None) -> dict:
         "current_stage": Stage.CRITICS_DEBATE,
         "current_node": "critics_debate",
     }
-
-
-# =============================================================================
-# MOCK TẠM — thay Tool 1 (prepare_context) lúc chưa ráp xong thật, để test
-# critics_debate với context có nội dung (thay vì context=None -> chunks=[]).
-# XÓA hàm này (và mọi chỗ gọi nó) khi Tool 1 thật đã sẵn sàng.
-# =============================================================================
-
-def load_mock(state) -> dict:
-    """[MOCK TẠM] Giả lập output Tool 1 -> set state['context'] có vài đoạn văn
-    bản mẫu để 4 critic có dẫn chứng thật khi test, thay vì '(không có đoạn văn
-    bản nào)'."""
-    chunks = [
-        SourceChunk(
-            chunk_id="mock-c1",
-            text=(
-                "Hắn về đến nhà, dắt theo một người đàn bà nữa. Mấy đứa trẻ con "
-                "thấy lạ vội chạy ra reo lên: 'anh Tràng ơi, chông vợ hài!'."
-            ),
-            source_ref="Vợ Nhặt (Kim Lân), đoạn mở đầu",
-        ),
-        SourceChunk(
-            chunk_id="mock-c2",
-            text=(
-                "Bà cụ Tứ nhìn người đàn bà, lòng đầy thương xót. 'Ừ, thôi thì "
-                "các con đã phải duyên phải kiếp với nhau, u cũng mừng lòng'."
-            ),
-            source_ref="Vợ Nhặt (Kim Lân), đoạn bà cụ Tứ",
-        ),
-        SourceChunk(
-            chunk_id="mock-c3",
-            text=(
-                "Sáng hôm sau, Tràng dậy thấy nhà cửa sạch sẽ, sân vườn quang "
-                "quẻ. Trong lòng hắn thấy êm ái lửng lơ như người vừa ở giấc mơ ra."
-            ),
-            source_ref="Vợ Nhặt (Kim Lân), đoạn buổi sáng hôm sau",
-        ),
-    ]
-    context = PreparedContext(
-        retrieval_query="[mock] Vợ Nhặt - Kim Lân",
-        chunks=chunks,
-        summary=(
-            "Tràng nhặt được vợ giữa nạn đói, đưa về ra mắt mẹ; sáng hôm sau cả "
-            "nhà cảm nhận sự đổi khác, tràn hy vọng dù đói khổ vẫn vây quanh."
-        ),
-        themes=["nạn đói", "khát vọng sống", "tình người"],
-        token_count=sum(len(c.text) for c in chunks),
-        retrieved_at=_now(),
-    )
-    return {"context": context}
