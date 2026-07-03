@@ -114,7 +114,6 @@ services:
     # Config hạ tầng + model: commit lên git, và GHI ĐÈ env_file nếu trùng key
     # (nên giá trị localhost lỡ có trong .env cũng không phá Docker).
     environment:
-      MONGODB_URI: "mongodb://mongo:27017/rag_db"
       REDIS_URL: "redis://redis:6379"
       OLLAMA_URL: "http://ollama:11434"
       FINE_TUNED_OLLAMA_LLM_MODEL: "hf.co/Tobi2904/qwen-finetuned-dpo-gguf:latest"

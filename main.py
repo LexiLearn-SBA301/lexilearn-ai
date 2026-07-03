@@ -25,13 +25,13 @@ async def lifespan(app: FastAPI):
     # Establish MongoDB connection when starting FastAPI server
     connect_to_mongo()
     # Dựng WorkflowService 1 lần ở startup, kèm Redis checkpointer (persist/resume theo thread_id).
-    checkpointer = get_checkpointer()
+    checkpointer = await get_checkpointer()
     app.state.workflow = WorkflowService(checkpointer=checkpointer)
     app.state.chat_svc = OllamaChatService()
     yield
     # Close connection when stopping
     close_mongo_connection()
-    close_checkpointer(checkpointer)
+    await close_checkpointer(checkpointer)
 
 app = FastAPI(
     title="RAG Service",
