@@ -15,9 +15,10 @@ from functools import partial
 from agents.critics_debate import critics_debate
 from agents.supervisor_judge import judge_node
 from graph.finalize import finalize
-from agents.mocks import factual_node, mock_write_essay_node
+from agents.mocks import factual_node
 from agents.supervisor import supervisor
 from agents.prepare_context import prepare_context
+from agents.write_essay import write_essay
 from state.agent_state import AgentState
 from state.state_schema import Route, Stage, Verdict
 
@@ -46,8 +47,8 @@ def build_graph(checkpointer=None, rag_service=None):
     g.add_node("debate", critics_debate)
     g.add_node("supervisor_judge_debate", judge_node)
     
-    # 3. Write Essay (Tool 3 - Đang mock)
-    g.add_node("write_essay", mock_write_essay_node)
+    # 3. Write Essay (Tool 3)
+    g.add_node("write_essay", write_essay)
     
     g.add_node("finalize", finalize)
 
