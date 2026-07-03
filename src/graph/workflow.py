@@ -39,6 +39,11 @@ def _route_supervisor_judge_context(state: AgentState) -> str:
     verdict = state.get("judges", {}).get(Stage.PREPARE_CONTEXT.value)
     return "prepare_context" if verdict is not None and verdict.verdict == Verdict.RETRY else "debate"
 
+def _route_supervisor_judge_essay(state: AgentState) -> str:
+    """Đọc verdict từ judge để quyết định bài luận đã đạt chưa."""
+    verdict = state.get("judges", {}).get(Stage.WRITE_ESSAY.value)
+    return "write_essay" if verdict is not None and verdict.verdict == Verdict.RETRY else "finalize"
+
 def build_graph(checkpointer=None, rag_service=None):
     """Dựng & compile graph. checkpointer=None -> chạy được nhưng không persist."""
     g = StateGraph(AgentState)
@@ -53,8 +58,9 @@ def build_graph(checkpointer=None, rag_service=None):
     g.add_node("debate", critics_debate)
     g.add_node("supervisor_judge_debate", judge_node)
     
-    # 3. Write Essay (Tool 3)
+    # 3. Write Essay (Tool 3) + Judge
     g.add_node("write_essay", write_essay)
+    g.add_node("supervisor_judge_essay", judge_node)
     
     g.add_node("finalize", finalize)
 
@@ -83,7 +89,14 @@ def build_graph(checkpointer=None, rag_service=None):
         {"debate": "debate", "write_essay": "write_essay"},
     )
     
-    g.add_edge("write_essay", "finalize")
+    # Tool 3 -> Judge essay -> (retry | finalize)
+    g.add_edge("write_essay", "supervisor_judge_essay")
+    g.add_conditional_edges(
+        "supervisor_judge_essay",
+        _route_supervisor_judge_essay,
+        {"write_essay": "write_essay", "finalize": "finalize"},
+    )
+    
     g.add_edge("finalize", END)
 
     return g.compile(checkpointer=checkpointer)
