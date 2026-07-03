@@ -110,9 +110,9 @@ class Citation(BaseModel):
     """1 trích dẫn trong essay, để Citation Checker (Python rule-based) verify."""
     citation_id: str
     quoted_text: str                         # đoạn được trích / diễn giải
-    source_ref: str                          # nguồn người đọc thấy
+    source_ref: Optional[str] = None         # nguồn người đọc thấy (có thể vắng, vd text user nhập) — như SourceChunk.source_ref
     chunk_id: Optional[str] = None           # link về SourceChunk thật
-    verified: bool = False                    # checker set
+    verified: bool = False                    # checker (hàm python) set
     verification_note: Optional[str] = None  # vì sao fail (nếu fail)
 
 
@@ -156,11 +156,11 @@ class Entity(BaseModel):
 
 class PreparedContext(BaseModel):
     retrieval_query: str = ""
-    chunks: list[SourceChunk] = Field(default_factory=list)   # văn bản gốc
+    chunks: list[SourceChunk] = Field(default_factory=list)   # retriever văn bản gốc
     summary: str = ""
     entities: list[Entity] = Field(default_factory=list)
     themes: list[str] = Field(default_factory=list)
-    key_passages: list[SourceChunk] = Field(default_factory=list)
+    key_passages: list[SourceChunk] = Field(default_factory=list) # retriever sau khi đã được lọc (optional)
     token_count: int = 0
     retrieved_at: Optional[datetime] = None
 
@@ -171,35 +171,30 @@ class PreparedContext(BaseModel):
 
 class Argument(BaseModel):
     arg_id: str
-    point: str                                # luận điểm
+    point: str                                # luận điểm cần bảo vệ
     support: str                              # diễn giải/lập luận
-    citation_ids: list[str] = Field(default_factory=list)
 
 
 class Rebuttal(BaseModel):
     """R2: critic này phản biện 1 luận điểm của critic khác."""
     target_critic: CriticRole
-    target_arg_id: Optional[str] = None
+    target_arg_id: Optional[str] = None  # arg_id của Argument personal khác ( đã có validate bằng code tránh bịa id)
     stance: Literal["agree", "disagree", "qualify"]   # đồng tình / phản đối / bổ sung-điều kiện
     reason: str
-    citation_ids: list[str] = Field(default_factory=list)
 
 
 class CriticTurn(BaseModel):
     """1 lượt nói của 1 critic trong 1 round."""
     critic: CriticRole
-    round: Literal[1, 2]
-    # R1: tự retrieve trước khi nói. R2: đọc bulletin (không bắt buộc retrieve lại).
-    retrieval_query: Optional[str] = None
-    retrieved_chunks: list[SourceChunk] = Field(default_factory=list)
-    bulletin_seen: bool = False               # R2 đã đọc bulletin?
-    thesis: str = ""
-    arguments: list[Argument] = Field(default_factory=list)
-    rebuttals: list[Rebuttal] = Field(default_factory=list)   # chỉ R2
-    citations: list[Citation] = Field(default_factory=list)
+    round: Literal[1, 2] # Literal quy ước kiểu giống enum chỉ được giá trị trong hoặc 1 hoặc 2
+    bulletin_seen: bool = False #đánh dấu là agent đã đọc ý kiến của 3 agent kia ở vòng 1 hay chưa (thường Vòng 1 là False, Vòng 2 là True)
+    thesis: str = "" # luận đề
+    arguments: list[Argument] = Field(default_factory=list) # Các luận điểm chi tiết bảo vệ cho thesis
+    rebuttals: list[Rebuttal] = Field(default_factory=list)   # chỉ R2, câu phản biện
+    citations: list[Citation] = Field(default_factory=list)  # các trích dẫn chứng minh cho luận điểm
     raw_output: str = ""                       # output thô từ Qwen-3B (debug/replay)
-    parsed_ok: bool = True                     # parse từ template thành công?
-    spoke_at: Optional[datetime] = None
+    parsed_ok: bool = True                     # parse từ template thành công (có lỗi format không)?, điều kiện cho cơ chế retry
+    spoke_at: Optional[datetime] = None  # thời gian hoàn thành
 
 
 class BulletinEntry(BaseModel):
@@ -348,6 +343,10 @@ class GraphState(TypedDict, total=False):
     retry_counts: Annotated[dict[str, int], merge_dict]   # {"prepare_context":1, ...}
     retry_limits: dict[str, int]                          # cấu hình: vd {"write_essay":1}
     last_feedback: Annotated[dict[str, str], merge_dict]  # feedback judge -> tool đọc khi retry
+    # bản TỐT NHẤT từng thấy qua các lần retry (key theo stage) -> khi hết lượt retry,
+    # dùng bản này thay vì bản cuối cùng (có thể tệ hơn) hoặc báo lỗi cứng.
+    # vd: {"critics_debate": {"output": DebateState(...), "score": 0.8}}
+    best_attempts: Annotated[dict[str, dict], merge_dict]
 
     # --- output ---
     final_output: Annotated[Optional[FinalOutput], take_last]

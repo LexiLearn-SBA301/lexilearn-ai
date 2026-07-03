@@ -73,6 +73,7 @@ class AgentState(TypedDict, total=False):
     retry_counts:  Annotated[dict[str, int], merge_dict]
     retry_limits:  dict[str, int]                                  # GraphState: trần chống loop vô hạn, Static Config không có merge func
     last_feedback: Annotated[dict[str, str], merge_dict]           # judge -> tool khi retry (retry có hướng)
+    best_attempts: Annotated[dict[str, dict], merge_dict]          # stage -> {"output":..., "score":float}; bản tốt nhất qua các lần retry
 
     # ===== 6. Tool tracking  (từ template) =====
     last_tool_called: Annotated[Optional[str], take_last]
@@ -112,6 +113,7 @@ def init_state(human_message: str, thread_id: str, run_id: str) -> AgentState:
         retry_counts={},
         retry_limits=dict(DEFAULT_RETRY_LIMITS),   # {"prepare_context":2,"critics_debate":2,"write_essay":1}
         last_feedback={},
+        best_attempts={},
         last_tool_called=None,
         tool_input=None,
         tool_result=None,

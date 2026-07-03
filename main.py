@@ -15,6 +15,7 @@ sys.path.insert(0, "src")
 from db.mongo_client import connect_to_mongo, close_mongo_connection
 from db.checkpointer import get_checkpointer, close_checkpointer
 from api.chat_router import router as chat_router
+from api.debate_router import router as debate_router
 from api.exception_handlers import register_exception_handlers
 from services.agent_service.workflow_service import WorkflowService
 from services.agent_service.chat_service import OllamaChatService
@@ -50,6 +51,7 @@ app.add_middleware(
 
 # Đăng ký các router API (tầng route nằm trong src/api/)
 app.include_router(chat_router)
+app.include_router(debate_router)   # endpoint test Tool 2 (critics_debate) độc lập
 
 # Đăng ký exception handlers tập trung (map domain exception -> HTTP), khác java không có container phải tự đăng ký
 register_exception_handlers(app)

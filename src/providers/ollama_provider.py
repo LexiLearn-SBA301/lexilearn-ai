@@ -22,16 +22,17 @@ class OllamaProvider:
         self._llms = {}          # cache ChatOllama theo TÊN model -> phục vụ nhiều model
         self._embeddings = None
 
-    def get_llm(self, model: str = FINE_TUNED_OLLAMA_LLM_MODEL) -> ChatOllama:
-        """ChatOllama cho `model` (mặc định = bản fine-tune). Cache lại theo tên."""
-        if model not in self._llms:
-            logger.info(f"Initializing ChatOllama with model: {model} on URL: {OLLAMA_URL}")
-            self._llms[model] = ChatOllama(
+    def get_llm(self, model: str = FINE_TUNED_OLLAMA_LLM_MODEL, temperature: float = 0.0) -> ChatOllama:
+        """ChatOllama cho `model` (mặc định = bản fine-tune). Cache theo (model, temperature)."""
+        key = (model, temperature)
+        if key not in self._llms:
+            logger.info(f"Initializing ChatOllama with model: {model} temperature={temperature} on URL: {OLLAMA_URL}")
+            self._llms[key] = ChatOllama(
                 base_url=OLLAMA_URL,
                 model=model,
-                temperature=0.0
+                temperature=temperature
             )
-        return self._llms[model]
+        return self._llms[key]
 
     def get_embeddings(self) -> OllamaEmbeddings:
         if self._embeddings is None:
