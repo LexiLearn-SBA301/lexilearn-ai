@@ -34,16 +34,22 @@ def _route_supervisor_judge_debate(state: AgentState) -> str:
     verdict = state.get("judges", {}).get(Stage.CRITICS_DEBATE.value)
     return "debate" if verdict is not None and verdict.verdict == Verdict.RETRY else "write_essay"
 
+def _route_supervisor_judge_context(state: AgentState) -> str:
+    """Đọc verdict từ judge để quyết định context đã đủ chi tiết chưa."""
+    verdict = state.get("judges", {}).get(Stage.PREPARE_CONTEXT.value)
+    return "prepare_context" if verdict is not None and verdict.verdict == Verdict.RETRY else "debate"
+
 def build_graph(checkpointer=None, rag_service=None):
     """Dựng & compile graph. checkpointer=None -> chạy được nhưng không persist."""
     g = StateGraph(AgentState)
     g.add_node("supervisor", supervisor)
     g.add_node("factual", factual_node)
     
-    # 1. Prepare Context (Tool 1)
+    # 1. Prepare Context (Tool 1) + Judge
     g.add_node("prepare_context", partial(prepare_context, rag_service=rag_service))
+    g.add_node("supervisor_judge_context", judge_node)
     
-    # 2. Critics Debate (Tool 2)
+    # 2. Critics Debate (Tool 2) + Judge
     g.add_node("debate", critics_debate)
     g.add_node("supervisor_judge_debate", judge_node)
     
@@ -61,9 +67,16 @@ def build_graph(checkpointer=None, rag_service=None):
     g.add_edge("factual", "finalize")
     
     # Luồng Deep Analysis:
-    g.add_edge("prepare_context", "debate")
-    g.add_edge("debate", "supervisor_judge_debate")
+    # Tool 1 -> Judge context -> (retry | debate)
+    g.add_edge("prepare_context", "supervisor_judge_context")
+    g.add_conditional_edges(
+        "supervisor_judge_context",
+        _route_supervisor_judge_context,
+        {"prepare_context": "prepare_context", "debate": "debate"},
+    )
     
+    # Tool 2 -> Judge debate -> (retry | write_essay)
+    g.add_edge("debate", "supervisor_judge_debate")
     g.add_conditional_edges(
         "supervisor_judge_debate",
         _route_supervisor_judge_debate,

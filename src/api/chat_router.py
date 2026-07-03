@@ -60,4 +60,7 @@ async def chat_with_workflow(req: ChatRequest, wf: WorkflowService = Depends(get
     """Chat với model FINE-TUNE kèm workflow Multi Agent."""
     thread_id = req.thread_id if req.thread_id else uuid.uuid4().hex
     state = await wf.invoke(req.message, thread_id)
+    # final_ai_response = state.get("final_ai_response", "")
+    # route = state.get("route", "")
+    # return WorkflowResponse(answer=final_ai_response, route=route)
     return state
