@@ -11,14 +11,14 @@ import logging
 
 from langgraph.graph import END, START, StateGraph
 
-from agents.critics_debate import critics_debate, load_mock
+from agents.critics_debate import critics_debate
 from agents.supervisor_judge import judge_node
 from functools import partial
 from graph.finalize import finalize
 from agents.mocks import deep_node, factual_node
 from agents.supervisor import supervisor
 from state.agent_state import AgentState
-from state.state_schema import Route
+from state.state_schema import Route, Stage, Verdict
 
 logger = logging.getLogger("rag-service.graph.workflow")
 
@@ -28,7 +28,8 @@ def _route_from_state(state: AgentState) -> str:
     return "deep" if state.get("route") == Route.DEEP else "factual"
 def _route_supervisor_judge_debate(state: AgentState) -> str:
     """Đọc route do supervisor set -> tên node đích cho conditional edge."""
-    return "debate" if state.get("judges", {}).get(Stage.CRITICS_DEBATE.value).verdict  == Verdict.RETRY else "next"
+    verdict = state.get("judges", {}).get(Stage.CRITICS_DEBATE.value)
+    return "debate" if verdict is not None and verdict.verdict == Verdict.RETRY else "next"
     # .verdict vì bây gió nó là object chứ không phải dict
 def build_graph(checkpointer=None, rag_service=None):
     """Dựng & compile graph. checkpointer=None -> chạy được nhưng không persist."""
