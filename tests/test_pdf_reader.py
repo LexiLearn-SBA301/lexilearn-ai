@@ -80,7 +80,7 @@ def test_heading_detection(reader):
     assert reader._is_heading("I. Tác giả Kim Lân") is True
     assert reader._is_heading("IV. Tổng kết") is True
     
-    assert reader._is_heading("1. Tiểu dẫn") is True
+    assert reader._is_heading("1. Tiểu dẫn") is False
     assert reader._is_heading("2.3. Giá trị nhân đạo") is True
     
     assert reader._is_heading("Bài 1: Khái quát văn học") is True

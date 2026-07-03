@@ -22,6 +22,7 @@ class ChunkMetadata(BaseModel):
     hoc_ki: int = Field(..., description="Học kì học tác phẩm này (ví dụ: 1)")
     nam_sang_tac: Optional[int] = Field(None, description="Năm sáng tác tác phẩm (ví dụ: 1962)")
     tags: List[str] = Field(default_factory=list, description="Các nhãn đặc tả nội dung")
+    is_biography: bool = Field(False, description="Đánh dấu chunk có nội dung giới thiệu tiểu sử tác giả/tiểu dẫn hay không")
 
 
 class ChunkSchema(BaseModel):

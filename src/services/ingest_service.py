@@ -14,6 +14,8 @@ from core.semantic_chunker import SemanticChunker
 from core.chunk_validator import ChunkValidator
 from core.embedder import Embedder
 from core.mongo_writer import MongoWriter
+from core.gemini_corrector import GeminiCorrector
+from core.gemini_analyzer import GeminiAnalyzer
 from models.chunk_schema import ChunkSchema, ChunkPosition, ChunkMetadata
 
 logger = logging.getLogger("rag-service.services.ingest-service")
@@ -66,11 +68,13 @@ class IngestService:
         import json
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
-        self.known_authors = config["known_authors"]
+        self.known_authors = config.get("known_authors", {})
+        self.work_to_author = config.get("work_to_author", {})
+        self.page_offsets = config.get("page_offsets", {})
         
         logger.info("IngestService initialized successfully.")
 
-    def start_ingestion(self, pdf_path_or_dir: str) -> str:
+    def start_ingestion(self, pdf_path_or_dir: str, use_llm_corrector: bool = False) -> str:
         """
         Start the ingestion process asynchronously.
         Returns the job_id immediately.
@@ -109,7 +113,7 @@ class IngestService:
         # Launch background execution in a separate daemon thread
         thread = threading.Thread(
             target=self._run_ingestion_sync,
-            args=(job_id, pdf_files)
+            args=(job_id, pdf_files, use_llm_corrector)
         )
         thread.daemon = True
         thread.start()
@@ -158,21 +162,30 @@ class IngestService:
             return "", "Bộ Giáo Dục và Đào Tạo"
             
         upper_title = title.upper()
+        
+        # 1. Try to extract explicit author from title (e.g. "TITLE - AUTHOR")
         for raw_auth, clean_auth in self.known_authors.items():
             pattern = rf"\s*[\s_\-\—\–:]+\s*{re.escape(raw_auth)}\s*$"
             pattern_space = rf"\s+{re.escape(raw_auth)}\s*$"
             
             if re.search(pattern, upper_title):
                 cleaned_title = re.sub(pattern, "", title, flags=re.IGNORECASE).strip()
-                return cleaned_title, clean_auth
+                return cleaned_title.upper(), clean_auth
             elif re.search(pattern_space, upper_title):
                 cleaned_title = re.sub(pattern_space, "", title, flags=re.IGNORECASE).strip()
-                return cleaned_title, clean_auth
+                return cleaned_title.upper(), clean_auth
                 
-        return title, "Bộ Giáo Dục và Đào Tạo"
+        # 2. If no explicit author suffix, lookup the cleaned title in the work_to_author map
+        # Strip parens and normalize to match dictionary keys
+        title_no_parens = re.sub(r'\(.*?\)', '', title).strip().lower()
+        if title_no_parens in self.work_to_author:
+            return title.upper(), self.work_to_author[title_no_parens]
+            
+        # 3. Fallback to default
+        return title.upper(), "Bộ Giáo Dục và Đào Tạo"
 
 
-    def _run_ingestion_sync(self, job_id: str, pdf_files: List[str]) -> None:
+    def _run_ingestion_sync(self, job_id: str, pdf_files: List[str], use_llm_corrector: bool = False) -> None:
         """
         Synchronous background runner function executed in a separate thread.
         """
@@ -195,6 +208,8 @@ class IngestService:
         try:
             # Initialize components once
             reader = PDFReader()
+            corrector = GeminiCorrector() if use_llm_corrector else None
+            analyzer = GeminiAnalyzer() if use_llm_corrector else None
             detector = StructureDetector()
             chunker = SemanticChunker()
             validator = ChunkValidator()
@@ -217,15 +232,36 @@ class IngestService:
                             f"Kiểm tra GEMINI_API_KEY (hiện tại: {'có' if gemini_key else 'chưa cấu hình'})"
                         )
                         
+                    # 1.5 Gemini Corrector (Always check everything if enabled)
+                    if corrector:
+                        elements = corrector.correct(elements, force_all=True)
+                        
+                    # Truncate elements for fast testing if DEBUG_MAX_BATCHES is set
+                    max_batches = int(os.getenv("DEBUG_MAX_BATCHES", "0"))
+                    if max_batches > 0:
+                        batch_size = int(os.getenv("GEMINI_CORRECTOR_BATCH_SIZE", "30"))
+                        limit = max_batches * batch_size
+                        if len(elements) > limit:
+                            logger.info(f"DEBUG MODE: Cắt giảm dữ liệu từ {len(elements)} xuống còn {limit} elements để test cực nhanh.")
+                            elements = elements[:limit]
+                        
                     # 2. Detect Structure
+                    logger.info("Bắt đầu Detect Structure...")
                     sections = detector.detect(elements)
+                    logger.info(f"Hoàn thành Detect Structure. Nhận diện được {len(sections)} sections.")
                     
                     # 3. Chunking
+                    logger.info("Bắt đầu Semantic Chunker...")
                     chunks = chunker.chunk(sections)
+                    logger.info(f"Hoàn thành Semantic Chunker. Tạo được {len(chunks)} chunks.")
                     
                     # 4. Validation
                     validated = validator.validate(chunks)
                     passed_chunks = [vc.chunk for vc in validated if vc.validation.passed]
+
+                    # 4.5 Gemini Analyzer (Extract metadata)
+                    if analyzer:
+                        passed_chunks = analyzer.analyze(passed_chunks)
 
                     if not passed_chunks:
                         # Find the first few validation errors to report
@@ -246,13 +282,22 @@ class IngestService:
                     total_chunks = len(passed_chunks)
 
                     # 5. Embedding & Saving
+                    # Resolve page offset for this specific PDF file
+                    page_offset = self.page_offsets.get(filename, 0)
+                    if page_offset != 0:
+                        logger.info(f"Áp dụng page_offset={page_offset} cho file '{filename}'")
+
+                    ai_metadata_count = 0
+                    fallback_metadata_count = 0
+
                     for idx, chunk in enumerate(passed_chunks):
                         # Generate embedding
                         emb_vector = embedder.embed_query(chunk.content)
                         
-                        # Build position & metadata
+                        # Build position with page_offset applied
+                        adjusted_page = chunk.page_start + page_offset
                         position = ChunkPosition(
-                            page=chunk.page_start,
+                            page=max(1, adjusted_page),  # Ensure page >= 1
                             chunk_index=idx,
                             total_chunks=total_chunks
                         )
@@ -263,14 +308,27 @@ class IngestService:
                         )
                         clean_title, resolved_author = self._clean_title_and_author(resolved_title)
 
+                        # Prefer AI-extracted metadata if available
+                        if chunk.ten_tac_pham:
+                            final_title = chunk.ten_tac_pham
+                            ai_metadata_count += 1
+                        else:
+                            final_title = clean_title
+                            fallback_metadata_count += 1
+                        final_author = chunk.tac_gia if chunk.tac_gia else resolved_author
+
+                        # Use Gemini-extracted year, or None if unavailable
+                        final_year = getattr(chunk, 'nam_sang_tac', None)
+
                         metadata = ChunkMetadata(
-                            ten_tac_pham=clean_title,
-                            tac_gia=resolved_author,
+                            ten_tac_pham=final_title.upper(),
+                            tac_gia=final_author,
                             lop=file_metadata["lop"],
                             the_loai=chunk.content_type,
                             hoc_ki=file_metadata["hoc_ki"],
-                            nam_sang_tac=2023,
-                            tags=chunk.tags
+                            nam_sang_tac=final_year,
+                            tags=chunk.tags,
+                            is_biography=chunk.is_biography
                         )
                         search_text = remove_vietnamese_accents(chunk.content)
 
@@ -291,6 +349,10 @@ class IngestService:
                         )
 
                         writer.upsert_chunk(chunk_doc)
+
+                    logger.info(
+                        f"[{job_id}] Metadata source: {ai_metadata_count} chunks từ Gemini AI, "
+                        f"{fallback_metadata_count} chunks dùng fallback (rule-based).")
 
                     processed_count += 1
                     # Update progress in DB

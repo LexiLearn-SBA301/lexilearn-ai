@@ -127,7 +127,7 @@ def test_content_assignment(detector):
     assert sections[0].level == 0
     assert sections[0].page_start == 1
     assert sections[0].page_end == 1
-    assert sections[0].content == ["Mở đầu tác phẩm..."]
+    assert sections[0].content == ["VỢ NHẶT", "Mở đầu tác phẩm..."]
     assert sections[0].parent_title is None
 
     assert sections[1].title == "I. TÁC GIẢ"
@@ -165,7 +165,7 @@ def test_detect_full_hierarchy(detector):
     assert sections[0].parent_title is None
     assert sections[0].page_start == 12
     assert sections[0].page_end == 12
-    assert sections[0].content == ["Đoạn mở đầu"]
+    assert sections[0].content == ["VỢ NHẶT", "Đoạn mở đầu"]
 
     
     assert sections[1].title == "I. TÁC GIẢ"

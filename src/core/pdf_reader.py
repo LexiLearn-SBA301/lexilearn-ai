@@ -29,7 +29,7 @@ logger = logging.getLogger("rag-service.pdf-reader")
 
 import vietnamese
 
-TCVN3_SIGNATURE_CHARS = "\u00b5\u00b8\u00b6\u00b7\u00b9\u00a8\u00bb\u00be\u00bc\u00bd\u00c6\u00a9\u00c7\u00cb\u00ae\u00d0\u00ce\u00cf\u00d1\u00aa\u00d6\u00d7\u00d8\u00dc\u00de\u00a7\u00a3\u00a4\u00a5\u00a6\u2212\u03bc\uf02d"
+TCVN3_SIGNATURE_CHARS = "\u00b5\u00b8\u00b6\u00b7\u00b9\u00a8\u00bb\u00be\u00bc\u00bd\u00c6\u00a9\u00c7\u00cb\u00ae\u00d0\u00ce\u00cf\u00d1\u00aa\u00d6\u00d7\u00d8\u00dc\u00de\u00a7\u00a3\u00a4\u00a5\u00a6\u2212\u03bc\uf02d\u00a2\u00f7"
 
 from config.gemini_ocr_system_prompt import GEMINI_OCR_SYSTEM_PROMPT
 
@@ -263,7 +263,7 @@ class PDFReader:
                 if page_text.strip().startswith("[HÌNH ẢNH"):
                     continue
                 self.current_page_is_tcvn3 = False
-                parsed = self._parse_text_layout(page_text, page_num, source_file)
+                parsed = self._parse_gemini_text_layout(page_text, page_num, source_file)
                 elements.extend(parsed)
 
             # Delay giữa các batch để tránh rate limit (15 RPM free tier)
@@ -323,13 +323,15 @@ class PDFReader:
                     config=types.GenerateContentConfig(
                         system_instruction=self._GEMINI_OCR_SYSTEM_PROMPT,
                         temperature=0.1,
-                        max_output_tokens=8192,
+                        max_output_tokens=65536,
                     ),
                 )
                 if response.text:
                     return response.text
-                logger.warning("Gemini Vision OCR returned empty response.")
-                return None
+                
+                # If we get here, response.text is empty or None
+                # Raise an exception to trigger the retry logic
+                raise ValueError(f"Gemini Vision OCR returned empty response. Safety ratings: {getattr(response, 'prompt_feedback', 'N/A')}")
             except Exception as e:
                 if attempt < max_retries - 1:
                     wait = (attempt + 1) * 5
@@ -375,25 +377,102 @@ class PDFReader:
             text = '\n'.join(lines)
 
         for i, page_num in enumerate(expected_pages):
-            marker = f"=== TRANG {page_num} ==="
-            next_marker = f"=== TRANG {expected_pages[i + 1]} ===" if i + 1 < len(expected_pages) else None
+            start_idx = -1
+            marker_len = 0
 
-            start_idx = text.find(marker)
+            # 1. Thử tìm chính xác marker === TRANG {page_num} ===
+            marker = f"=== TRANG {page_num} ==="
+            idx = text.find(marker)
+            if idx != -1:
+                start_idx = idx
+                marker_len = len(marker)
+            else:
+                # 2. Thử tìm bằng regex linh hoạt (không phân biệt hoa thường, cho phép các ký tự đặc biệt bao quanh)
+                pattern = re.compile(
+                    rf"(?:[=\-#\*]{{1,}}\s*)?(?:TRANG|trang)\s+{page_num}\b(?:\s*[=\-#\*]{{1,}})?",
+                    re.IGNORECASE
+                )
+                match = pattern.search(text)
+                if match:
+                    start_idx = match.start()
+                    marker_len = match.end() - match.start()
+
             if start_idx == -1:
                 logger.warning(f"Marker for page {page_num} not found in Gemini OCR response. Skipping.")
                 continue
 
-            start_content = start_idx + len(marker)
-            if next_marker:
-                end_idx = text.find(next_marker, start_content)
-                if end_idx == -1:
-                    end_idx = len(text)
-            else:
-                end_idx = len(text)
+            start_content = start_idx + marker_len
+
+            # Tìm vị trí kết thúc (bắt đầu của trang tiếp theo)
+            end_idx = len(text)
+            if i + 1 < len(expected_pages):
+                next_page_num = expected_pages[i + 1]
+                # 1. Thử tìm chính xác marker === TRANG {next_page_num} ===
+                next_marker = f"=== TRANG {next_page_num} ==="
+                next_idx = text.find(next_marker, start_content)
+                if next_idx != -1:
+                    end_idx = next_idx
+                else:
+                    # 2. Thử tìm bằng regex linh hoạt cho trang kế tiếp
+                    next_pattern = re.compile(
+                        rf"(?:[=\-#\*]{{1,}}\s*)?(?:TRANG|trang)\s+{next_page_num}\b(?:\s*[=\-#\*]{{1,}})?",
+                        re.IGNORECASE
+                    )
+                    next_match = next_pattern.search(text, start_content)
+                    if next_match:
+                        end_idx = next_match.start()
 
             result[page_num] = text[start_content:end_idx].strip()
 
         return result
+
+    def _parse_gemini_text_layout(self, text: Optional[str], page_num: int, source_file: str) -> List[ExtractedElement]:
+        """
+        Parses Gemini OCR output with markdown heading markers.
+        """
+        if not text:
+            return []
+
+        lines = text.split("\n")
+        elements: List[ExtractedElement] = []
+        current_para_lines: List[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            if stripped.startswith("#### "):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                heading_text = self._clean_text(stripped[5:])
+                elements.append(ExtractedElement(page=page_num, type="heading", raw_text=heading_text, source_file=source_file))
+            elif stripped.startswith("### "):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                heading_text = self._clean_text(stripped[4:])
+                elements.append(ExtractedElement(page=page_num, type="heading", raw_text=heading_text, source_file=source_file))
+            elif stripped.startswith("## "):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                heading_text = self._clean_text(stripped[3:])
+                elements.append(ExtractedElement(page=page_num, type="heading", raw_text=heading_text, source_file=source_file))
+            else:
+                cleaned = self._clean_text(stripped, is_final=False)
+                if not cleaned:
+                    continue
+                current_para_lines.append(cleaned)
+                if cleaned[-1] in (".", "?", "!", "\u201d", '"'):
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+
+        if current_para_lines:
+            elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+
+        return elements
 
     def _parse_text_layout(self, text: Optional[str], page_num: int, source_file: str) -> List[ExtractedElement]:
         """
@@ -412,7 +491,12 @@ class PDFReader:
             if not cleaned:
                 continue
 
-            if self._is_heading(cleaned):
+            if self._is_numbered_item(cleaned):
+                if current_para_lines:
+                    elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
+                    current_para_lines = []
+                elements.append(ExtractedElement(page=page_num, type="numbered_item", raw_text=cleaned, source_file=source_file))
+            elif self._is_heading(cleaned):
                 if current_para_lines:
                     elements.append(self._build_paragraph_element(current_para_lines, page_num, source_file))
                     current_para_lines = []
@@ -663,23 +747,24 @@ class PDFReader:
         """
         Heuristic to detect if a line is a Heading in Vietnamese textbook materials.
         """
-        if not line or len(line) > 120:
+        if not line or len(line) > 150:
             return False
 
         has_letters = any(c.isalpha() for c in line)
         if has_letters:
             # Check if mostly uppercase (at least 75% of letters are uppercase)
-            # This handles OCR noise at the end of lines (e.g. "RA-MA BUỘC TỘI va v‹")
-            letters = [c for c in line if c.isalpha()]
+            # Exclude content in parentheses when checking uppercase ratio
+            line_no_parens = re.sub(r'\(.*?\)', '', line)
+            letters = [c for c in line_no_parens if c.isalpha()]
             upper_letters = [c for c in letters if c.isupper()]
-            if len(upper_letters) / len(letters) >= 0.75:
+            if letters and len(upper_letters) / len(letters) >= 0.75:
                 return True
 
         if re.match(r'^[IVXLCDM]+\.?\s+', line):
             return True
 
-        vietnamese_caps = "A-ZÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶEÈÉẺẼẸÊỀẾỂỄỆIÌÍỈĨỊOÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢUÙÚỦŨỤƯỪỨỬỮỰYỲÝỶỸỴ"
-        if re.match(rf'^\d+(\.\d+)*\.?\s+[{vietnamese_caps}]', line):
+        vietnamese_caps = "A-ZÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ"
+        if re.match(rf'^\d+\.\d+(\.\d+)*\.?\s+[{vietnamese_caps}]', line):
             return True
 
         lower_line = line.lower()
@@ -703,6 +788,13 @@ class PDFReader:
                     return True
 
         return False
+
+    def _is_numbered_item(self, line: str) -> bool:
+        """Detect single-level numbered line like '1. Tác giả' or '2. So sánh...'"""
+        if not line:
+            return False
+        vietnamese_caps = "A-ZÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ"
+        return bool(re.match(rf'^\d+\.?\s+[{vietnamese_caps}]', line))
 
     def _is_list_item(self, line: str) -> bool:
         """

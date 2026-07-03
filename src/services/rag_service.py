@@ -195,7 +195,7 @@ class RAGService:
 
         return ordered_docs
 
-    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5) -> Dict[str, Any]:
+    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5, model_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Answer a RAG query by retrieving contexts and calling Ollama LLM to synthesize the final answer.
         """
@@ -230,7 +230,10 @@ class RAGService:
         user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
 
         try:
-            llm = ollama_provider.get_llm()
+            if model_name:
+                llm = ollama_provider.get_llm(model=model_name)
+            else:
+                llm = ollama_provider.get_llm()
             from langchain_core.messages import SystemMessage, HumanMessage
             messages = [
                 SystemMessage(content=system_prompt),
