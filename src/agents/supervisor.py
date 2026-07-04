@@ -18,7 +18,14 @@ from pydantic import BaseModel, Field
 
 from providers.gemini_provider import gemini_provider
 from state.agent_state import AgentState
-from state.state_schema import CriticRole, IntentAnalysis, Route, Stage
+from state.state_schema import (
+    CriticRole,
+    EventEmitter,
+    IntentAnalysis,
+    Route,
+    Stage,
+    safe_stream_writer,
+)
 
 logger = logging.getLogger("rag-service.graph.supervisor")
 
@@ -96,10 +103,26 @@ def supervisor(state: AgentState) -> dict:
         analyzed_at=datetime.now(timezone.utc),
     )
     logger.info("Supervisor route=%s conf=%.2f", d.route, d.confidence)
+
+    emitter = EventEmitter(state, writer=safe_stream_writer())
+    emitter.intent(
+        "supervisor:intent",
+        intent.reasoning or f"Phân loại câu hỏi: {d.route.value}",
+        payload={
+            "work_title": intent.work_title,
+            "author": intent.author,
+            "route": d.route.value,
+            "confidence": d.confidence,
+            "detected_entities": intent.detected_entities,
+        },
+    )
+    emitter.route("supervisor:intent", d.route.value)
     return {
         "intent": intent,
         "route": d.route,
         "current_stage": Stage.INTENT,
         "current_node": "supervisor:intent",
         "status": "running",
+        "events": emitter.milestones,
+        "event_seq": emitter.seq,
     }

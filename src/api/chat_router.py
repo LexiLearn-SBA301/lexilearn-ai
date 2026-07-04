@@ -5,11 +5,13 @@ Mục đích: Cung cấp API cho FE truy vấn hệ thống RAG và tùy chọn 
 để phục vụ A/B Testing và luồng multi-agent workflow.
 """
 
+import json
 import logging
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
@@ -64,3 +66,31 @@ async def chat_with_workflow(req: ChatRequest, wf: WorkflowService = Depends(get
     # route = state.get("route", "")
     # return WorkflowResponse(answer=final_ai_response, route=route)
     return state
+
+
+@router.post("/stream")
+async def chat_stream(req: ChatRequest, wf: WorkflowService = Depends(get_workflow)) -> StreamingResponse:
+    """Chat workflow Multi Agent — STREAM tiến trình (thinking) + output ra UI qua SSE.
+
+    Mỗi dòng SSE là `data: <StreamEvent json>\\n\\n`. FE đọc bằng fetch + ReadableStream
+    (POST nên không dùng EventSource). Kết thúc bằng event type=done từ node finalize.
+    """
+    thread_id = req.thread_id if req.thread_id else uuid.uuid4().hex
+
+    async def gen():
+        try:
+            async for ev in wf.astream(req.message, thread_id):
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except Exception as e:  # lỗi giữa chừng -> báo 1 event ERROR rồi đóng stream
+            logger.exception("Stream workflow failed thread=%s", thread_id)
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",   # tắt buffer của nginx để FE thấy realtime
+        },
+    )
