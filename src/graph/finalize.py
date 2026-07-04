@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from langchain_core.messages import AIMessage
 
 from state.agent_state import AgentState
-from state.state_schema import FinalOutput, Route, Stage
+from state.state_schema import EventEmitter, FinalOutput, Route, Stage, safe_stream_writer
 
 logger = logging.getLogger("rag-service.graph.finalize")
 
@@ -53,6 +53,20 @@ def finalize(state: AgentState) -> dict:
         finished_at=datetime.now(timezone.utc),
     )
     logger.info("Finalize route=%s len(answer)=%d", route, len(answer))
+
+    emitter = EventEmitter(state, writer=safe_stream_writer())
+    emitter.done(
+        "finalize",
+        content="Hoàn tất.",
+        # answer = text câu trả lời CUỐI để FE hiển thị (khi Tool 3 có token-stream thì
+        # đây là bản chốt trùng với text đã stream). chars/citations để FE hiện meta.
+        payload={
+            "route": (route or Route.FACTUAL).value,
+            "answer": answer,
+            "chars": len(answer),
+            "citations": len(citations),
+        },
+    )
     return {
         "messages": [AIMessage(content=answer)],   # add_messages nối vào lịch sử
         "final_ai_response": answer,
@@ -60,4 +74,6 @@ def finalize(state: AgentState) -> dict:
         "current_stage": Stage.DONE,
         "current_node": "finalize",
         "status": "done",
+        "events": emitter.milestones,
+        "event_seq": emitter.seq,
     }

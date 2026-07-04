@@ -368,16 +368,31 @@ DEFAULT_RETRY_LIMITS: dict[str, int] = {
 # 12. HELPER – emit event (minh họa cách stream realtime)
 # =============================================================================
 
+def safe_stream_writer():
+    """get_stream_writer() an toàn: trả None nếu gọi NGOÀI ngữ cảnh LangGraph run.
+
+    - Trong lúc astream(stream_mode="custom"): trả writer thật -> đẩy realtime.
+    - Trong lúc ainvoke (không stream): trả writer no-op (ghi bị bỏ, không raise).
+    - Khi gọi node trực tiếp trong unit test (ngoài mọi run): get_stream_writer() raise
+      -> bắt lại trả None -> EventEmitter chỉ gom milestone, không stream.
+    """
+    try:
+        from langgraph.config import get_stream_writer
+        return get_stream_writer()
+    except Exception:
+        return None
+
+
 class EventEmitter:
     """
-    Bọc việc phát event. Trong LangGraph: dùng get_stream_writer() để đẩy
-    custom event ra ngoài ngay lập tức (realtime), đồng thời trả về list
-    milestone-event để node merge vào state.events.
+    Bọc việc phát event. Trong LangGraph: dùng safe_stream_writer() để đẩy custom event
+    ra ngoài ngay lập tức (realtime), đồng thời gom list milestone để node merge vào
+    state.events. Mỗi event tự đính `payload["ui"]` (màu/severity/lane) qua config.ui_theme.
 
     Cách dùng trong 1 node:
-        emitter = EventEmitter(state, writer=get_stream_writer())
-        emitter.thinking("supervisor", "Đang phân tích intent...")
-        emitter.token("critic:tam_ly:r1", "Nhân vật ")   # stream, không vào state
+        emitter = EventEmitter(state, writer=safe_stream_writer())
+        emitter.intent("supervisor:intent", "Câu hỏi phân tích sâu...", payload={...})
+        emitter.token("write_essay", "Nhân vật ")   # stream, không vào state
         ...
         return {"events": emitter.milestones, "event_seq": emitter.seq, ...}
     """
@@ -392,6 +407,7 @@ class EventEmitter:
         return self.seq
 
     def emit(self, ev: StreamEvent, *, persist: bool) -> None:
+        """Hàm đẩy envent ra ngoài nếu có writer, nếu không thì chỉ lưu vào persist của state.events"""
         # luôn đẩy ra ngoài realtime nếu có writer
         if self.writer is not None:
             self.writer(ev.model_dump(mode="json"))
@@ -399,26 +415,66 @@ class EventEmitter:
         if persist:
             self.milestones.append(ev)
 
-    def thinking(self, node: str, content: str, actor: str = "") -> None:
+    def _mk(self, type: EventType, node: str, *, actor: str = "", title: str = "",
+            content: str = "", payload: Optional[dict] = None, role=None, verdict=None,
+            is_partial: bool = False, parent_seq: Optional[int] = None,
+            persist: bool = True) -> None:
+        """Hàm dựng cấu trúc của 1 event"""
+        from config.ui_theme import ui_meta
+        pl = dict(payload or {})
+        pl.setdefault("ui", ui_meta(type, role=role, verdict=verdict)) # setdefault = nếu có "ui" giữ nguyên nếu không có mới set
         self.emit(
-            StreamEvent(seq=self._next(), type=EventType.THINKING, node=node,
-                        actor=actor, content=content, ts=datetime.now(timezone.utc)),
-            persist=True,
+            StreamEvent(seq=self._next(), type=type, node=node, actor=actor, title=title,
+                        content=content, payload=pl, is_partial=is_partial,
+                        parent_seq=parent_seq, ts=datetime.now(timezone.utc)),
+            persist=persist,
         )
 
-    def token(self, node: str, text: str) -> None:
-        # token-level: stream dở, KHÔNG persist (tránh phình state)
-        self.emit(
-            StreamEvent(seq=self._next(), type=EventType.TOKEN, node=node,
-                        content=text, is_partial=True, ts=datetime.now(timezone.utc)),
-            persist=False,
-        )
+    # --- milestone (persist) ---
+    def thinking(self, node: str, content: str, actor: str = "") -> None:
+        self._mk(EventType.THINKING, node, actor=actor, content=content)
+
+    def status(self, node: str, content: str, *, title: str = "", payload: Optional[dict] = None) -> None:
+        self._mk(EventType.STATUS, node, content=content, title=title, payload=payload)
+
+    def intent(self, node: str, content: str, *, payload: Optional[dict] = None) -> None:
+        self._mk(EventType.INTENT, node, actor="Điều phối", content=content, payload=payload)
+
+    def route(self, node: str, route_value: str, *, payload: Optional[dict] = None) -> None:
+        pl = dict(payload or {})
+        pl.setdefault("route", route_value)
+        self._mk(EventType.ROUTE, node, content=route_value, payload=pl)
+
+    def retrieval(self, node: str, content: str, *, payload: Optional[dict] = None) -> None:
+        self._mk(EventType.RETRIEVAL, node, content=content, payload=payload)
+
+    def critic_turn(self, node: str, role, content: str, *, actor: str = "",
+                    payload: Optional[dict] = None, parent_seq: Optional[int] = None) -> None:
+        self._mk(EventType.CRITIC_TURN, node, actor=actor, content=content,
+                 payload=payload, role=role, parent_seq=parent_seq)
+
+    def bulletin(self, node: str, content: str, *, payload: Optional[dict] = None,
+                 parent_seq: Optional[int] = None) -> None:
+        self._mk(EventType.BULLETIN, node, content=content, payload=payload, parent_seq=parent_seq)
+
+    def retry(self, node: str, content: str, *, payload: Optional[dict] = None) -> None:
+        self._mk(EventType.RETRY, node, actor="Giám khảo", content=content, payload=payload)
+
+    def citation_check(self, node: str, content: str, *, payload: Optional[dict] = None) -> None:
+        self._mk(EventType.CITATION_CHECK, node, content=content, payload=payload)
+
+    def done(self, node: str, content: str = "", *, payload: Optional[dict] = None) -> None:
+        self._mk(EventType.DONE, node, content=content, payload=payload)
+
+    def error(self, node: str, content: str, *, payload: Optional[dict] = None) -> None:
+        self._mk(EventType.ERROR, node, content=content, payload=payload)
 
     def judge(self, node: str, verdict: JudgeVerdict) -> None:
-        self.emit(
-            StreamEvent(seq=self._next(), type=EventType.JUDGE, node=node,
-                        actor="Giám khảo", content=verdict.reasoning,
-                        payload={"verdict": verdict.verdict, "scores": verdict.scores},
-                        ts=datetime.now(timezone.utc)),
-            persist=True,
-        )
+        self._mk(EventType.JUDGE, node, actor="Giám khảo", content=verdict.reasoning,
+                 verdict=verdict.verdict,
+                 payload={"verdict": verdict.verdict, "scores": verdict.scores,
+                          "feedback": verdict.feedback})
+
+    # --- token (KHÔNG persist: tránh phình state) ---
+    def token(self, node: str, text: str) -> None:
+        self._mk(EventType.TOKEN, node, content=text, is_partial=True, persist=False)

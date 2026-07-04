@@ -36,6 +36,7 @@ from langgraph.graph import END, START, StateGraph
 
 from agents.debate_schemas import CriticR1Out, CriticR2Out
 from config.critic_prompts import CRITIC_PERSONAS
+from config.ui_theme import ui_meta
 from state.state_schema import (
     CRITIC_DISPLAY,
     Argument,
@@ -43,10 +44,14 @@ from state.state_schema import (
     CriticRole,
     CriticTurn,
     DebateState,
+    EventEmitter,
+    EventType,
     Rebuttal,
     SourceChunk,
     Stage,
+    StreamEvent,
     merge_dict,
+    safe_stream_writer,
 )
 
 logger = logging.getLogger("rag-service.agents.critics_debate")
@@ -294,12 +299,67 @@ def _speak_r2(role: CriticRole, own_thesis: str,
 
 
 # =============================================================================
+# Emit LIVE ra stream ngay khi 1 lượt critic xong (Phase 3 — tiến trình thật).
+# Node subgraph gọi safe_stream_writer() để lấy writer của run CHA (contextvar tự
+# truyền qua subgraph.invoke; cần astream(subgraphs=True) — xác nhận ở Phase 0 spike).
+# seq ở đây là BEST-EFFORT (R1: 1..4, bulletin: 5, R2: 11..14) — FE sắp LIVE theo `ts`.
+# Bản PERSIST (seq tuần tự nối tiếp state cha) do node public critics_debate() dựng lại.
+# =============================================================================
+
+def _turn_payload(round_no: int, turn: CriticTurn) -> dict:
+    """Data nghiệp vụ của 1 lượt critic -> payload (dùng chung cho live & persist)."""
+    return {
+        "round": round_no,
+        "parsed_ok": turn.parsed_ok,
+        "arguments": [{"arg_id": a.arg_id, "point": a.point, "support": a.support}
+                      for a in turn.arguments],
+        "rebuttals": [{"target_critic": r.target_critic.value, "stance": r.stance,
+                       "reason": r.reason} for r in turn.rebuttals],
+    }
+
+
+def _emit_live_turn(writer, role: CriticRole, round_no: int, turn: CriticTurn) -> None:
+    if writer is None:
+        return
+    payload = _turn_payload(round_no, turn)
+    payload["ui"] = ui_meta(EventType.CRITIC_TURN, role=role)
+    ev = StreamEvent(
+        seq=(0 if round_no == 1 else 10) + CRITIC_ORDER.index(role) + 1,
+        type=EventType.CRITIC_TURN,
+        node=f"critic:{role.value}:r{round_no}",
+        actor=CRITIC_DISPLAY[role],
+        content=turn.thesis or "(chưa parse được luận điểm)",
+        payload=payload,
+        ts=_now(),
+    )
+    writer(ev.model_dump(mode="json"))
+
+
+def _emit_live_bulletin(writer, bulletin: list[BulletinEntry]) -> None:
+    if writer is None:
+        return
+    ev = StreamEvent(
+        seq=5, type=EventType.BULLETIN, node="debate:bulletin",
+        content="Bảng tin chung đã sẵn sàng.",
+        payload={
+            "entries": [{"critic": e.critic.value, "thesis": e.thesis,
+                         "key_points": e.key_points} for e in bulletin],
+            "ui": ui_meta(EventType.BULLETIN),
+        },
+        ts=_now(),
+    )
+    writer(ev.model_dump(mode="json"))
+
+
+# =============================================================================
 # Node của subgraph (factory bắt sẵn role + llm -> tránh late-binding trong loop)
 # =============================================================================
 
 def make_r1_node(role: CriticRole, llm):
     def _node(state: DebateSubState) -> dict:
-        return {"round1": {role: _speak_r1(role, state, llm)}}
+        turn = _speak_r1(role, state, llm)
+        _emit_live_turn(safe_stream_writer(), role, 1, turn)   # bắn LIVE ngay khi lượt xong
+        return {"round1": {role: turn}}
     return _node
 
 
@@ -307,7 +367,9 @@ def make_r2_node(role: CriticRole, llm):
     def _node(state: DebateSubState) -> dict:
         own = state.get("round1", {}).get(role)
         own_thesis = own.thesis if own else ""
-        return {"round2": {role: _speak_r2(role, own_thesis, state.get("bulletin", []), llm)}}
+        turn = _speak_r2(role, own_thesis, state.get("bulletin", []), llm)
+        _emit_live_turn(safe_stream_writer(), role, 2, turn)
+        return {"round2": {role: turn}}
     return _node
 
 
@@ -325,6 +387,7 @@ def bulletin_node(state: DebateSubState) -> dict:
             key_points=[a.point for a in turn.arguments],
             arg_ids=[a.arg_id for a in turn.arguments],
         ))
+    _emit_live_bulletin(safe_stream_writer(), bulletin)
     return {"bulletin": bulletin}
 
 
@@ -434,8 +497,30 @@ def critics_debate(state, *, subgraph=None) -> dict:
         total_invocations=len(r1) + len(r2),
     )
     logger.info("Tool2 critics_debate xong: R1=%d R2=%d", len(r1), len(r2))
+
+    # không bắn SEE mục đích ở hàm này là lưu lại presist milestone vào state.events
+    emitter = EventEmitter(state, writer=None)
+    for role in CRITIC_ORDER:
+        turn = r1.get(role)
+        if turn:
+            emitter.critic_turn(f"critic:{role.value}:r1", role,
+                                turn.thesis or "(chưa parse được luận điểm)",
+                                actor=CRITIC_DISPLAY[role], payload=_turn_payload(1, turn))
+    emitter.bulletin(
+        "debate:bulletin", "Bảng tin chung đã sẵn sàng.",
+        payload={"entries": [{"critic": e.critic.value, "thesis": e.thesis,
+                              "key_points": e.key_points} for e in debate.bulletin]},
+    )
+    for role in CRITIC_ORDER:
+        turn = r2.get(role)
+        if turn:
+            emitter.critic_turn(f"critic:{role.value}:r2", role,
+                                turn.thesis or "(phản biện)",
+                                actor=CRITIC_DISPLAY[role], payload=_turn_payload(2, turn))
     return {
         "debate": debate,
         "current_stage": Stage.CRITICS_DEBATE,
         "current_node": "critics_debate",
+        "events": emitter.milestones,
+        "event_seq": emitter.seq,
     }

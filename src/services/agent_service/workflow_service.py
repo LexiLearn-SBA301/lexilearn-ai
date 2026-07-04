@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from graph.workflow import build_graph
 from state.agent_state import AgentState, init_state
@@ -47,3 +47,24 @@ class WorkflowService:
             logger.exception("Workflow failed thread=%s run=%s", thread_id, run_id)
             state["status"] = "failed"
             raise
+
+    async def astream(self, human_message: str, thread_id: str,
+                      run_id: Optional[str] = None) -> AsyncIterator[dict]:
+        """Chạy graph 1 lượt, YIELD từng StreamEvent (dict) realtime.
+
+        Dùng stream_mode=["custom"] + subgraphs=True (BẮT BUỘC subgraphs=True, nếu không
+        custom event phát từ trong subgraph debate sẽ bị nuốt — xác nhận ở Phase 0 spike).
+        Với cấu hình này mỗi chunk là 3-tuple (namespace, mode, data):
+          - namespace == ()            -> event từ graph gốc
+          - namespace == ('debate:..') -> event từ subgraph debate
+        Node tự đính payload['ui']; ở đây chỉ yield `data` (dict đã model_dump).
+        """
+        run_id = run_id or uuid.uuid4().hex
+        state = init_state(human_message, thread_id=thread_id, run_id=run_id)
+        config = {"configurable": {"thread_id": thread_id}}
+        logger.info("Astream workflow thread=%s run=%s", thread_id, run_id)
+        async for namespace, mode, data in self.app.astream(
+            state, config=config, stream_mode=["custom"], subgraphs=True
+        ):
+            if mode == "custom":
+                yield data

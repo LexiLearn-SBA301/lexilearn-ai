@@ -52,10 +52,12 @@ from state.agent_state import AgentState
 from state.state_schema import (
     DebateState,
     EssayDraft,
+    EventEmitter,
     JudgeVerdict,
     PreparedContext,
     Stage,
     Verdict,
+    safe_stream_writer,
 )
 
 load_dotenv()
@@ -210,6 +212,7 @@ def judge_node(state: AgentState, *, client=None) -> dict:
             "(vd critics_debate() set Stage.CRITICS_DEBATE)."
         )
 
+    emitter = EventEmitter(state, writer=safe_stream_writer())
     render = _CONTENT_RENDERERS[label_stage]
     out = _judge(label_stage, render(state), client=client)
 
@@ -253,7 +256,16 @@ def judge_node(state: AgentState, *, client=None) -> dict:
     logger.info("Judge %s verdict=%s score=%.2f", label_stage.value, verdict.value, score)
 
     delta["judges"] = {label_stage.value: judge_verdict}
+    node_name = f"judge:{label_stage.value}"
+    emitter.judge(node_name, judge_verdict)
     if verdict == Verdict.RETRY:
         delta["retry_counts"] = {label_stage.value: count + 1}
         delta["last_feedback"] = {label_stage.value: out.feedback}
+        emitter.retry(
+            node_name,
+            out.feedback or "Chưa đạt yêu cầu, chạy lại.",
+            payload={"stage": label_stage.value, "attempt": count + 1, "limit": limit},
+        )
+    delta["events"] = emitter.milestones
+    delta["event_seq"] = emitter.seq
     return delta
