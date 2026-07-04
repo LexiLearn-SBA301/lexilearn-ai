@@ -152,12 +152,18 @@ class RAGService:
         if filters:
             metadata_keys = {"ten_tac_pham", "tac_gia", "lop", "the_loai", "hoc_ki", "nam_sang_tac", "tags"}
             for key, val in filters.items():
-                if key.startswith("metadata.") or key in ["source_doc_id", "chunk_id", "is_active"]:
-                    db_filter[key] = val
-                elif key in metadata_keys:
-                    db_filter[f"metadata.{key}"] = val
+                # Áp dụng regex không phân biệt chữ hoa/thường cho các giá trị chuỗi
+                if isinstance(val, str):
+                    val_condition = {"$regex": f"^{re.escape(val)}$", "$options": "i"}
                 else:
-                    db_filter[key] = val
+                    val_condition = val
+                    
+                if key.startswith("metadata.") or key in ["source_doc_id", "chunk_id", "is_active"]:
+                    db_filter[key] = val_condition
+                elif key in metadata_keys:
+                    db_filter[f"metadata.{key}"] = val_condition
+                else:
+                    db_filter[key] = val_condition
 
         # 2. Get Query Embedding
         query_vector = self.embedder.embed_query(query)
