@@ -11,16 +11,23 @@ from agents.supervisor import _Decision
 
 
 def test_route_from_state():
-    assert _route_from_state({"route": Route.DEEP}) == "deep"
+    assert _route_from_state({"route": Route.DEEP}) == "prepare_context"
     assert _route_from_state({"route": Route.FACTUAL}) == "factual"
     assert _route_from_state({}) == "factual"  # mặc định khi chưa có route
+
+
+class MockRAGService:
+    def hybrid_search(self, query, filters=None, limit=5, k=60):
+        return [{"chunk_id": "c1", "text": "Mock content", "metadata": {"ten_tac_pham": "mock"}}]
+    def query(self, query, filters=None, limit=5, model_name=None):
+        return {"answer": "Mock factual answer", "sources": []}
 
 
 def _run_with_route(route: Route) -> dict:
     """Ép supervisor ra 1 route cố định rồi chạy graph (không cần Gemini key)."""
     with patch("agents.supervisor._classify",
                return_value=_Decision(route=route, reasoning="test")):
-        app = build_graph()  # không checkpointer -> đủ test routing
+        app = build_graph(rag_service=MockRAGService())  # Inject mock RAG
         return app.invoke(init_state("câu hỏi test", "t1", "r1"))
 
 
@@ -29,7 +36,7 @@ def test_graph_routes_to_factual():
     assert out["route"] == Route.FACTUAL
     assert out.get("factual") is not None
     assert out.get("essay") is None
-    assert out["current_stage"] == Stage.FACTUAL
+    assert out["current_stage"] == Stage.DONE
 
 
 def test_graph_routes_to_deep():
