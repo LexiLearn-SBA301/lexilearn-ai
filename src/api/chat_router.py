@@ -10,10 +10,11 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
 from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse
+from schemas.suggestion_schema import SuggestionsResponse
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
 from services.rag_service import RAGService
 from services.agent_service.workflow_service import WorkflowService
@@ -94,3 +95,25 @@ async def chat_stream(req: ChatRequest, wf: WorkflowService = Depends(get_workfl
             "X-Accel-Buffering": "no",   # tắt buffer của nginx để FE thấy realtime
         },
     )
+
+@router.get("/works/suggestions", response_model=SuggestionsResponse)
+def get_work_suggestions(
+    work_title: str = Query(..., description="Tên tác phẩm cần lấy câu hỏi gợi ý"),
+    rag_service: RAGService = Depends(get_rag_service)
+) -> SuggestionsResponse:
+    """Lấy danh sách 3 câu hỏi gợi ý cho một tác phẩm (hỗ trợ lazy-caching)."""
+    try:
+        res = rag_service.get_suggested_questions(work_title)
+        return SuggestionsResponse(
+            ten_tac_pham=res["ten_tac_pham"],
+            tac_gia=res["tac_gia"],
+            suggested_questions=res["suggested_questions"]
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error("Lỗi khi lấy câu hỏi gợi ý: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi hệ thống khi lấy câu hỏi gợi ý: {str(e)}"
+        )

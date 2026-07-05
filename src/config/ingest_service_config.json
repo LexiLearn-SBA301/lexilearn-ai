@@ -122,5 +122,13 @@
   },
   "page_offsets": {
     "sach-giao-khoa-ngu-van-12-tap-1-nang-cao.pdf": -1
-  }
+  },
+  "excluded_titles": [
+    "SÁCH GIÁO KHOA",
+    "ĐỌC THÊM",
+    "GIỚI THIỆU",
+    "TỔNG KẾT",
+    "MỞ ĐẦU",
+    "LỜI NÓI ĐẦU"
+  ]
 }
