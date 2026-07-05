@@ -267,6 +267,110 @@ class RAGService:
             "sources": chunks
         }
 
+    def get_suggested_questions(self, work_title: str) -> dict:
+        """
+        Retrieves 3 suggested questions for a work.
+        Uses lazy-caching: checks db, falls back to Gemini on-the-fly and saves cache.
+        """
+        import re
+        from datetime import datetime, timezone
+        from providers.gemini_provider import gemini_provider
+        from pydantic import BaseModel, Field
+        from google.genai import types
+        import json
+
+        works_col = self.db["works_metadata"]
+        
+        # 1. Tìm kiếm trong cache DB
+        query_regex = {"$regex": f"^{re.escape(work_title.strip())}$", "$options": "i"}
+        cached = works_col.find_one({"ten_tac_pham": query_regex})
+        
+        if cached:
+            logger.info("Found cached suggestions for work: %s", cached.get("ten_tac_pham"))
+            return {
+                "ten_tac_pham": cached.get("ten_tac_pham", ""),
+                "tac_gia": cached.get("tac_gia", "Không rõ"),
+                "suggested_questions": cached.get("suggested_questions", [])
+            }
+            
+        # 2. Sinh động nếu chưa có cache
+        logger.info("No cached suggestions for '%s'. Falling back to dynamic generation.", work_title)
+        
+        chunks_col = self.db["chunks"]
+        chunks = list(chunks_col.find(
+            {"metadata.ten_tac_pham": query_regex, "is_active": True},
+            {"content": 1, "metadata": 1}
+        ).limit(5))
+        
+        if not chunks:
+            raise ValueError(f"Không tìm thấy tác phẩm '{work_title}' trong cơ sở dữ liệu.")
+            
+        metadata = chunks[0].get("metadata", {})
+        resolved_author = metadata.get("tac_gia", "Không rõ")
+        resolved_title = metadata.get("ten_tac_pham", work_title.upper())
+        grade = metadata.get("lop", 12)
+        semester = metadata.get("hoc_ki", 1)
+        
+        chunk_texts = [c.get("content", "") for c in chunks]
+        sample_text = "\n\n".join(chunk_texts)[:2000]
+        
+        client = gemini_provider.get_client()
+        if not client:
+            raise RuntimeError("Hệ thống chưa được cấu hình GEMINI_API_KEY để sinh câu hỏi.")
+            
+        class SuggestedQuestionsOut(BaseModel):
+            questions: list[str] = Field(description="Danh sách đúng 3 câu hỏi gợi ý.")
+            
+        prompt = (
+            f"Tác phẩm: {resolved_title}\n"
+            f"Tác giả: {resolved_author}\n"
+            f"Lớp: {grade} - Học kì: {semester}\n"
+            f"Nội dung tiêu biểu:\n---\n{sample_text}\n---\n\n"
+            f"Nhiệm vụ: Hãy tạo ra đúng 3 câu hỏi gợi ý hay, phong phú và sâu sắc về tác phẩm này để học sinh hỏi trợ lý AI. "
+            f"Yêu cầu:\n"
+            f"1. Câu hỏi 1: Tập trung vào kiến thức cơ bản (ví dụ hoàn cảnh sáng tác, nội dung chính, tác giả).\n"
+            f"2. Câu hỏi 2: Tập trung vào phân tích nghệ thuật, nội tâm nhân vật hoặc tranh biện về một quan điểm trong tác phẩm.\n"
+            f"3. Câu hỏi 3: Tập trung vào so sánh, mở rộng, hoặc liên hệ thực tế/đời sống ngày nay.\n"
+            f"Tất cả câu hỏi phải viết bằng tiếng Việt chuẩn xác, ngắn gọn, hấp dẫn."
+        )
+        
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=SuggestedQuestionsOut,
+                temperature=0.7
+            )
+        )
+        
+        data = json.loads(resp.text)
+        questions = data.get("questions", [])
+        if not questions:
+            raise ValueError("Gemini returned empty questions list.")
+            
+        works_col.update_one(
+            {"ten_tac_pham": resolved_title.upper()},
+            {
+                "$set": {
+                    "ten_tac_pham": resolved_title.upper(),
+                    "tac_gia": resolved_author,
+                    "lop": grade,
+                    "hoc_ki": semester,
+                    "suggested_questions": questions,
+                    "updated_at": datetime.now(timezone.utc)
+                }
+            },
+            upsert=True
+        )
+        logger.info("Successfully generated and cached suggested questions for: %s", resolved_title.upper())
+        
+        return {
+            "ten_tac_pham": resolved_title.upper(),
+            "tac_gia": resolved_author,
+            "suggested_questions": questions
+        }
+
     def evaluate(self, ground_truth_path: str = "ground_truth.json", limit: int = 5) -> Dict[str, Any]:
         """
         Evaluate retrieval performance of the RAG system using Hit Rate @ N and MRR @ N.
