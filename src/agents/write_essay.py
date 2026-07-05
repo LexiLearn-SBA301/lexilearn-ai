@@ -4,7 +4,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from state.agent_state import AgentState
-from state.state_schema import Stage, EssayDraft, EssaySection, CRITIC_DISPLAY
+from state.state_schema import Stage, EssayDraft, EssaySection, CRITIC_DISPLAY, EventEmitter, safe_stream_writer
 from agents.essay_schemas import EssayLLMOutput
 from config.essay_prompts import ESSAY_SYSTEM_PROMPT, ESSAY_USER_PROMPT_TEMPLATE
 from providers.ollama_provider import ollama_provider, FINE_TUNED_OLLAMA_LLM_MODEL
@@ -75,8 +75,20 @@ def _render_context_summary(context: Any) -> str:
     return "\n".join(parts)
 
 
+def _stream_prose(emitter: EventEmitter, node: str, text: str) -> None:
+    """Cách 2 — chảy chữ "giả": tua lại prose ĐÃ sinh xong ra kênh token (is_partial,
+    KHÔNG persist) để FE có hiệu ứng gõ chữ. KHÔNG đụng bước sinh structured của Tool 3.
+    Text vào đây đã sạch (chỉ heading + body, không có `thinking`) nên đẩy thẳng an toàn;
+    answer chuẩn vẫn nằm ở done.payload.answer (finalize) nên token chỉ để hiển thị."""
+    if not text:
+        return
+    for word in text.split(" "):
+        emitter.token(node, word + " ")
+
+
 def write_essay(state: AgentState) -> dict:
     """Node public (Tool 3). Đọc debate + context, gọi LLM sinh bài luận."""
+    emitter = EventEmitter(state, writer=safe_stream_writer())
     query = state.get("human_message", "")
     context = state.get("context")
     debate = state.get("debate")
@@ -105,6 +117,7 @@ def write_essay(state: AgentState) -> dict:
     structured_llm = llm.with_structured_output(EssayLLMOutput)
     
     logger.info("Tool3 write_essay bắt đầu sinh bài (sẽ tốn thời gian vì sinh text dài)...")
+    emitter.status("write_essay", "Đang viết bài luận…")
     try:
         # Gọi mô hình để lấy structured output
         out: EssayLLMOutput = structured_llm.invoke(msgs)
@@ -128,7 +141,14 @@ def write_essay(state: AgentState) -> dict:
             word_count=word_count,
         )
         logger.info("Tool3 write_essay xong: title='%s', words=%d", essay.title, essay.word_count)
-        
+        # Cách 2: tua prose sạch ra kênh token cho FE gõ dần, rồi chốt milestone hoàn thành.
+        _stream_prose(emitter, "write_essay", full_text)
+        emitter.status(
+            "write_essay",
+            f"Đã hoàn thành bản thảo: {essay.title} ({essay.word_count} từ)",
+            payload={"title": essay.title, "word_count": essay.word_count},
+        )
+
     except Exception as e:
         logger.error("Tool3 write_essay structured lỗi (%s) -> trả fallback", e)
         # Fallback nếu model parse lỗi
@@ -137,9 +157,12 @@ def write_essay(state: AgentState) -> dict:
             full_text=f"[LỖI TOOL 3] Không thể sinh bài luận từ dữ liệu tranh luận. Lỗi: {e}",
             word_count=0
         )
+        emitter.status("write_essay", "Lỗi sinh bài luận, dùng bản dự phòng.")
 
     return {
         "essay": essay,
         "current_stage": Stage.WRITE_ESSAY,
         "current_node": "write_essay",
+        "events": emitter.milestones,
+        "event_seq": emitter.seq,
     }
