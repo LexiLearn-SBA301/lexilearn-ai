@@ -22,12 +22,16 @@ _JUDGE_BASE = (
 _CRITERIA: dict[Stage, str] = {
     Stage.PREPARE_CONTEXT: (
         f"{_JUDGE_BASE}\n\n"
-        "Tiêu chí chấm Tool 1 (prepare_context) — \"Context đủ chi tiết?\":\n"
-        "- relevance: các đoạn trích (chunks) có liên quan trực tiếp tới tác phẩm/câu "
-        "hỏi không.\n"
-        "- coverage: tóm tắt + entities/themes có đủ để 4 nhà phê bình ở Tool 2 phân "
-        "tích đa góc nhìn (hình thức, lịch sử, tâm lý, tiếp nhận) không, hay quá sơ sài.\n"
-        "- accuracy: tóm tắt có bám sát đoạn trích, không bịa thêm chi tiết ngoài văn bản."
+        "Tiêu chí chấm Tool 1 (prepare_context) — \"Context có dùng được cho Tool 2 không?\":\n"
+        "- relevance: các đoạn trích (chunks) có liên quan tới tác phẩm/câu hỏi không.\n"
+        "- coverage: các đoạn trích có đủ nội dung để 4 nhà phê bình ở Tool 2 phân tích "
+        "không. Tool 2 phân tích TRỰC TIẾP trên đoạn trích thô, KHÔNG đọc entities/themes; "
+        "vì vậy chấm coverage theo lượng và nội dung ĐOẠN TRÍCH liên quan, KHÔNG tính "
+        "entities/themes — đây là metadata phụ và có thể rỗng.\n"
+        "- accuracy: tóm tắt (nếu có) bám sát đoạn trích, không bịa chi tiết ngoài văn bản.\n\n"
+        "Chọn 'retry' khi context KHÔNG dùng được cho Tool 2: không có đoạn trích liên "
+        "quan, hoặc tóm tắt sai lệch/bịa so với đoạn trích. Còn lại là 'pass'; entities/"
+        "themes rỗng hay tóm tắt ngắn KHÔNG phải lý do 'retry'."
     ),
     Stage.CRITICS_DEBATE: (
         f"{_JUDGE_BASE}\n\n"
