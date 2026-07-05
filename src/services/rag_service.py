@@ -12,6 +12,11 @@ from retrievals.rrf import reciprocal_rank_fusion
 from providers.ollama_provider import ollama_provider
 from config.prompt_template import SYSTEM_PROMPT
 from security.injection_guard import InjectionGuard
+from providers.gemini_provider import gemini_provider
+from google.genai import types
+from schemas.suggestion_schema import SuggestedQuestionsOut
+from datetime import datetime, timezone
+import json
 
 logger = logging.getLogger("rag-service.services.rag-service")
 logging.basicConfig(level=logging.INFO)
@@ -272,13 +277,6 @@ class RAGService:
         Retrieves 3 suggested questions for a work.
         Uses lazy-caching: checks db, falls back to Gemini on-the-fly and saves cache.
         """
-        import re
-        from datetime import datetime, timezone
-        from providers.gemini_provider import gemini_provider
-        from pydantic import BaseModel, Field
-        from google.genai import types
-        import json
-
         works_col = self.db["works_metadata"]
         
         # 1. Tìm kiếm trong cache DB
@@ -318,24 +316,19 @@ class RAGService:
         if not client:
             raise RuntimeError("Hệ thống chưa được cấu hình GEMINI_API_KEY để sinh câu hỏi.")
             
-        class SuggestedQuestionsOut(BaseModel):
-            questions: list[str] = Field(description="Danh sách đúng 3 câu hỏi gợi ý.")
-            
-        prompt = (
-            f"Tác phẩm: {resolved_title}\n"
-            f"Tác giả: {resolved_author}\n"
-            f"Lớp: {grade} - Học kì: {semester}\n"
-            f"Nội dung tiêu biểu:\n---\n{sample_text}\n---\n\n"
-            f"Nhiệm vụ: Hãy tạo ra đúng 3 câu hỏi gợi ý hay, phong phú và sâu sắc về tác phẩm này để học sinh hỏi trợ lý AI. "
-            f"Yêu cầu:\n"
-            f"1. Câu hỏi 1: Tập trung vào kiến thức cơ bản (ví dụ hoàn cảnh sáng tác, nội dung chính, tác giả).\n"
-            f"2. Câu hỏi 2: Tập trung vào phân tích nghệ thuật, nội tâm nhân vật hoặc tranh biện về một quan điểm trong tác phẩm.\n"
-            f"3. Câu hỏi 3: Tập trung vào so sánh, mở rộng, hoặc liên hệ thực tế/đời sống ngày nay.\n"
-            f"Tất cả câu hỏi phải viết bằng tiếng Việt chuẩn xác, ngắn gọn, hấp dẫn."
+        from config.prompt_template import SUGGESTED_QUESTIONS_PROMPT_TEMPLATE
+        prompt = SUGGESTED_QUESTIONS_PROMPT_TEMPLATE.format(
+            title=resolved_title,
+            author=resolved_author,
+            grade=grade,
+            semester=semester,
+            sample_text=sample_text
         )
         
+        gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        
         resp = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=gemini_model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",

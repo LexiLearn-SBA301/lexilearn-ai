@@ -10,10 +10,11 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
 from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse
+from schemas.suggestion_schema import SuggestionsResponse
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
 from services.rag_service import RAGService
 from services.agent_service.workflow_service import WorkflowService
@@ -94,15 +95,6 @@ async def chat_stream(req: ChatRequest, wf: WorkflowService = Depends(get_workfl
             "X-Accel-Buffering": "no",   # tắt buffer của nginx để FE thấy realtime
         },
     )
-
-
-from fastapi import Query, HTTPException
-from pydantic import BaseModel
-
-class SuggestionsResponse(BaseModel):
-    ten_tac_pham: str
-    tac_gia: str
-    suggested_questions: list[str]
 
 @router.get("/works/suggestions", response_model=SuggestionsResponse)
 def get_work_suggestions(

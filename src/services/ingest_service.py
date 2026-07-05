@@ -17,7 +17,11 @@ from core.mongo_writer import MongoWriter
 from core.gemini_corrector import GeminiCorrector
 from core.gemini_analyzer import GeminiAnalyzer
 from models.chunk_schema import ChunkSchema, ChunkPosition, ChunkMetadata
-
+from providers.gemini_provider import gemini_provider
+from google.genai import types
+from schemas.suggestion_schema import SuggestedQuestionsOut
+from config.prompt_template import SUGGESTED_QUESTIONS_PROMPT_TEMPLATE
+import json
 logger = logging.getLogger("rag-service.services.ingest-service")
 logging.basicConfig(level=logging.INFO)
 
@@ -65,11 +69,11 @@ class IngestService:
         # Load known authors configuration
         current_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "ingest_service_config.json"))
-        import json
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        self.known_authors = config.get("known_authors", {})
-        self.work_to_author = config.get("work_to_author", {})
+            self.known_authors = config.get("known_authors", {})
+            self.work_to_author = config.get("work_to_author", {})
+            self.excluded_titles = config.get("excluded_titles", ["SÁCH GIÁO KHOA", "ĐỌC THÊM", "GIỚI THIỆU", "TỔNG KẾT", "MỞ ĐẦU", "LỜI NÓI ĐẦU"])
         self.page_offsets = config.get("page_offsets", {})
         
         logger.info("IngestService initialized successfully.")
@@ -189,7 +193,6 @@ class IngestService:
         Generates 3 suggested questions for a unique work and saves to works_metadata.
         """
         try:
-            from providers.gemini_provider import gemini_provider
             client = gemini_provider.get_client()
             if not client:
                 logger.warning("Không có GEMINI_API_KEY. Bỏ qua việc tự động sinh câu hỏi gợi ý.")
@@ -197,27 +200,18 @@ class IngestService:
             
             sample_text = "\n\n".join(chunk_texts)[:2000]
             
-            prompt = (
-                f"Tác phẩm: {work_title}\n"
-                f"Tác giả: {author}\n"
-                f"Lớp: {grade} - Học kì: {semester}\n"
-                f"Nội dung tiêu biểu:\n---\n{sample_text}\n---\n\n"
-                f"Nhiệm vụ: Hãy tạo ra đúng 3 câu hỏi gợi ý hay, phong phú và sâu sắc về tác phẩm này để học sinh hỏi trợ lý AI. "
-                f"Yêu cầu:\n"
-                f"1. Câu hỏi 1: Tập trung vào kiến thức cơ bản (ví dụ hoàn cảnh sáng tác, nội dung chính, tác giả).\n"
-                f"2. Câu hỏi 2: Tập trung vào phân tích nghệ thuật, nội tâm nhân vật hoặc tranh biện về một quan điểm trong tác phẩm.\n"
-                f"3. Câu hỏi 3: Tập trung vào so sánh, mở rộng, hoặc liên hệ thực tế/đời sống ngày nay.\n"
-                f"Tất cả câu hỏi phải viết bằng tiếng Việt chuẩn xác, ngắn gọn, hấp dẫn."
+            prompt = SUGGESTED_QUESTIONS_PROMPT_TEMPLATE.format(
+                title=work_title,
+                author=author,
+                grade=grade,
+                semester=semester,
+                sample_text=sample_text
             )
             
-            from google.genai import types
-            from pydantic import BaseModel, Field
-            
-            class SuggestedQuestionsOut(BaseModel):
-                questions: list[str] = Field(description="Danh sách đúng 3 câu hỏi gợi ý.")
+            gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
                 
             resp = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=gemini_model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -226,7 +220,6 @@ class IngestService:
                 )
             )
             
-            import json
             data = json.loads(resp.text)
             questions = data.get("questions", [])
             if not questions:
@@ -389,7 +382,7 @@ class IngestService:
                         final_author = chunk.tac_gia if chunk.tac_gia else resolved_author
 
                         title_upper = final_title.upper().strip()
-                        if title_upper and title_upper not in ["SÁCH GIÁO KHOA", "ĐỌC THÊM", "GIỚI THIỆU", "TỔNG KẾT", "MỞ ĐẦU", "LỜI NÓI ĐẦU"]:
+                        if title_upper and title_upper not in self.excluded_titles:
                             if title_upper not in work_groups:
                                 work_groups[title_upper] = []
                             if len(work_groups[title_upper]) < 5:
