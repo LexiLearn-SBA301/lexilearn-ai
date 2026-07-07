@@ -99,7 +99,7 @@ def write_essay(state: AgentState) -> dict:
     
     # Nếu có feedback từ judge (với Tool 3, có thể tương lai thêm judge, cấu trúc sẵn)
     fb = (state.get("last_feedback") or {}).get(Stage.WRITE_ESSAY.value, "")
-    fb_block = f"--- GÓP Ý TỪ GIÁM KHẢO CHO LƯỢT TRƯỚC ---\n{fb}\nHãy sửa lại bài viết theo góp ý này." if fb else ""
+    fb_block = f"\n\n--- GÓP Ý TỪ GIÁM KHẢO CHO LƯỢT TRƯỚC ---\n{fb}\nHãy sửa lại bài viết theo góp ý trên, giữ nguyên những điểm đã tốt." if fb else ""
 
     user_prompt = ESSAY_USER_PROMPT_TEMPLATE.format(
         query=query,
