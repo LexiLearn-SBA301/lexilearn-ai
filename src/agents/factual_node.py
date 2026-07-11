@@ -19,8 +19,9 @@ def factual_node(state: AgentState, rag_service: Optional[RAGService] = None) ->
         logger.info(f"Factual node querying RAGService for: {query}")
         emitter.status("factual", "Đang tra cứu tài liệu…")
 
+        filters = state.get("filters", {})
         # Dùng model fine-tune như yêu cầu của user
-        result = rag_service.query(query=query, model_name=FINE_TUNED_OLLAMA_LLM_MODEL)
+        result = rag_service.query(query=query, filters=filters, model_name=FINE_TUNED_OLLAMA_LLM_MODEL)
 
         answer = result.get("answer", "Không có câu trả lời.")
         raw_sources = result.get("sources", [])

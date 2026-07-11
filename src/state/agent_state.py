@@ -61,6 +61,7 @@ class AgentState(TypedDict, total=False):
     # ===== 3. Routing / intent  (Supervisor) =====
     intent: Annotated[Optional[IntentAnalysis], take_last]
     route: Annotated[Optional[Route], take_last]
+    filters: Annotated[Optional[dict], take_last]       # filters explicitly from frontend API
 
     # ===== 4. Kết quả nhánh / tool  (object, không phải float|str) =====
     factual: Annotated[Optional[FactualResult], take_last]   # <- RAG_answer | giàu hơn: giữ citation
@@ -93,7 +94,7 @@ class AgentState(TypedDict, total=False):
     event_seq: Annotated[int, take_last]
 
 
-def init_state(human_message: str, thread_id: str, run_id: str) -> AgentState:
+def init_state(human_message: str, thread_id: str, run_id: str, filters: Optional[dict] = None) -> AgentState:
     """State khởi đầu cho 1 lần chạy."""
     return AgentState(
         thread_id=thread_id,
@@ -105,6 +106,7 @@ def init_state(human_message: str, thread_id: str, run_id: str) -> AgentState:
         messages=[{"role": "user", "content": human_message}],
         intent=None,
         route=None,
+        filters=filters,
         factual=None,
         context=None,
         debate=None,

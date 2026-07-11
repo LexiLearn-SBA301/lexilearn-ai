@@ -31,14 +31,14 @@ class WorkflowService:
         logger.info("WorkflowService sẵn sàng (persist=%s).", checkpointer is not None)
 
     async def invoke(self, human_message: str, thread_id: str,
-               run_id: Optional[str] = None) -> AgentState:
+               run_id: Optional[str] = None, filters: Optional[dict] = None) -> AgentState:
         """Chạy graph 1 lượt -> trả state cuối.
 
         thread_id: định danh cuộc hội thoại (để checkpoint/resume khi có Redis).
         run_id: 1 lượt chat; tự sinh nếu không truyền.
         """
         run_id = run_id or uuid.uuid4().hex
-        state = init_state(human_message, thread_id=thread_id, run_id=run_id)
+        state = init_state(human_message, thread_id=thread_id, run_id=run_id, filters=filters)
         config = {"configurable": {"thread_id": thread_id}}
         logger.info("Invoke workflow thread=%s run=%s", thread_id, run_id)
         try:
@@ -49,7 +49,7 @@ class WorkflowService:
             raise
 
     async def astream(self, human_message: str, thread_id: str,
-                      run_id: Optional[str] = None) -> AsyncIterator[dict]:
+                      run_id: Optional[str] = None, filters: Optional[dict] = None) -> AsyncIterator[dict]:
         """Chạy graph 1 lượt, YIELD từng StreamEvent (dict) realtime.
 
         Dùng stream_mode=["custom"] + subgraphs=True (BẮT BUỘC subgraphs=True, nếu không
@@ -60,7 +60,7 @@ class WorkflowService:
         Node tự đính payload['ui']; ở đây chỉ yield `data` (dict đã model_dump).
         """
         run_id = run_id or uuid.uuid4().hex
-        state = init_state(human_message, thread_id=thread_id, run_id=run_id)
+        state = init_state(human_message, thread_id=thread_id, run_id=run_id, filters=filters)
         config = {"configurable": {"thread_id": thread_id}}
         logger.info("Astream workflow thread=%s run=%s", thread_id, run_id)
         async for namespace, mode, data in self.app.astream(
