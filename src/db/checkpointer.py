@@ -23,10 +23,15 @@ async def get_checkpointer():
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     from langgraph.checkpoint.redis import AsyncRedisSaver
 
-    checkpointer = AsyncRedisSaver(redis_url)
-    await checkpointer.asetup()  # tạo index lần đầu (idempotent các lần sau)
-    logger.info("AsyncRedisSaver checkpointer sẵn sàng (%s).", redis_url)
-    return checkpointer
+    try:
+        checkpointer = AsyncRedisSaver(redis_url)
+        await checkpointer.asetup()  # tạo index lần đầu (idempotent các lần sau)
+        logger.info("AsyncRedisSaver checkpointer sẵn sàng (%s).", redis_url)
+        return checkpointer
+    except Exception as e:
+        logger.warning(f"Lỗi kết nối Redis ({e}). Tự động fallback sang MemorySaver (chỉ dùng cho DEV)!")
+        from langgraph.checkpoint.memory import MemorySaver
+        return MemorySaver()
 
 
 async def close_checkpointer(checkpointer) -> None:

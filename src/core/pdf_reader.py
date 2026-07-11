@@ -770,6 +770,9 @@ class PDFReader:
         lower_line = line.lower()
         for kw in self.heading_keywords:
             if lower_line.startswith(kw):
+                if len(line) > 80:
+                    return False
+                
                 after_kw = lower_line[len(kw):]
                 if not after_kw or not after_kw[0].isalnum():
                     if kw in {"văn bản", "bài", "chương", "phần"}:
@@ -803,7 +806,7 @@ class PDFReader:
         if not line:
             return False
         
-        return bool(re.match(r'^([•\-\*\+\–\—]|\d+[\)\.]|[a-zA-Z][\)\.])\s+', line))
+        return bool(re.match(r'^([•\-\*\+\–\—]|\d+[\)\.]|[a-z][\)\.])\s+', line))
 
     def _clean_doc_them_heading(self, line: str) -> str:
         """

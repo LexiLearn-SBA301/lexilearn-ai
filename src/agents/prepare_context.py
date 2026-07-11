@@ -83,7 +83,7 @@ def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
     # Ưu tiên keyword đã tách (work_title + author + entities); rỗng -> fallback câu hỏi gốc.
     query = _build_retrieval_query(intent) or raw_query
 
-    filters = {}
+    filters = state.get("filters", {}) or {}
     if intent:
         if intent.work_title:
             filters["ten_tac_pham"] = _ci_match(intent.work_title)   # khớp bất kể hoa/thường

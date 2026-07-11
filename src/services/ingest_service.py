@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from db.mongo_client import connect_to_mongo, get_database
 from core.pdf_reader import PDFReader
+from core.docx_reader import DocxReader
 from core.structure_detector import StructureDetector
 from core.semantic_chunker import SemanticChunker
 from core.chunk_validator import ChunkValidator
@@ -87,7 +88,7 @@ class IngestService:
         pdf_files = []
         if os.path.isdir(pdf_path_or_dir):
             for filename in os.listdir(pdf_path_or_dir):
-                if filename.endswith(".pdf"):
+                if filename.endswith(".pdf") or filename.endswith(".docx"):
                     pdf_files.append(os.path.normpath(os.path.join(pdf_path_or_dir, filename)))
         elif os.path.isfile(pdf_path_or_dir):
             pdf_files.append(os.path.normpath(pdf_path_or_dir))
@@ -95,7 +96,7 @@ class IngestService:
             raise FileNotFoundError(f"Path not found: {pdf_path_or_dir}")
 
         if not pdf_files:
-            raise ValueError(f"No PDF files found in: {pdf_path_or_dir}")
+            raise ValueError(f"No PDF/Docx files found in: {pdf_path_or_dir}")
 
         # Generate unique job ID
         job_id = f"job_{uuid.uuid4().hex[:12]}"
@@ -268,9 +269,11 @@ class IngestService:
 
         try:
             # Initialize components once
-            reader = PDFReader()
-            corrector = GeminiCorrector() if use_llm_corrector else None
-            analyzer = GeminiAnalyzer() if use_llm_corrector else None
+            pdf_reader = PDFReader()
+            docx_reader = DocxReader()
+            # corrector and analyzer disabled per user request
+            corrector = None
+            analyzer = None
             detector = StructureDetector()
             chunker = SemanticChunker()
             validator = ChunkValidator()
@@ -284,13 +287,15 @@ class IngestService:
                 filename = os.path.basename(pdf_path)
                 logger.info(f"[{job_id}] Processing file: {filename}")
                 try:
-                    # 1. Read PDF
-                    elements = reader.read(pdf_path)
+                    # 1. Read Document
+                    if filename.lower().endswith(".docx"):
+                        elements = docx_reader.read(pdf_path)
+                    else:
+                        elements = pdf_reader.read(pdf_path)
+                        
                     if not elements:
-                        gemini_key = os.getenv("GEMINI_API_KEY")
                         raise ValueError(
-                            f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và tất cả OCR dự phòng thất bại. "
-                            f"Kiểm tra GEMINI_API_KEY (hiện tại: {'có' if gemini_key else 'chưa cấu hình'})"
+                            f"Tệp '{filename}' không chứa văn bản dạng số hoặc không thể trích xuất."
                         )
                         
                     # 1.5 Gemini Corrector (Always check everything if enabled)
@@ -353,6 +358,17 @@ class IngestService:
 
                     work_groups = {}
                     work_info = {}
+                    work_genres = {}
+
+                    # First pass: Extract genre for each literary work
+                    for chunk in passed_chunks:
+                        resolved_title = chunk.ten_tac_pham or "Sách Giáo Khoa"
+                        clean_title, _ = self._clean_title_and_author(resolved_title)
+                        title_upper = clean_title.upper().strip()
+                        
+                        match = re.search(r'Thể loại:\s*([^\n]+)', chunk.content, re.IGNORECASE)
+                        if match and title_upper not in work_genres:
+                            work_genres[title_upper] = match.group(1).strip()
 
                     for idx, chunk in enumerate(passed_chunks):
                         # Generate embedding
@@ -365,11 +381,7 @@ class IngestService:
                             chunk_index=idx,
                             total_chunks=total_chunks
                         )
-                        resolved_title = self._resolve_work_title(
-                            chunk.section_title,
-                            chunk.page_start,
-                            sections
-                        )
+                        resolved_title = chunk.ten_tac_pham or "Sách Giáo Khoa"
                         clean_title, resolved_author = self._clean_title_and_author(resolved_title)
 
                         # Prefer AI-extracted metadata if available
@@ -395,12 +407,13 @@ class IngestService:
 
                         # Use Gemini-extracted year, or None if unavailable
                         final_year = getattr(chunk, 'nam_sang_tac', None)
+                        final_genre = work_genres.get(title_upper, "Chưa rõ")
 
                         metadata = ChunkMetadata(
                             ten_tac_pham=final_title.upper(),
                             tac_gia=final_author,
                             lop=file_metadata["lop"],
-                            the_loai=chunk.content_type,
+                            the_loai=final_genre,
                             hoc_ki=file_metadata["hoc_ki"],
                             nam_sang_tac=final_year,
                             tags=chunk.tags,

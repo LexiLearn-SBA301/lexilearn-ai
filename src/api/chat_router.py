@@ -62,7 +62,7 @@ def chat_base(req: ChatRequest, rag_service: RAGService = Depends(get_rag_servic
 async def chat_with_workflow(req: ChatRequest, wf: WorkflowService = Depends(get_workflow)) -> AgentState:
     """Chat với model FINE-TUNE kèm workflow Multi Agent."""
     thread_id = req.thread_id if req.thread_id else uuid.uuid4().hex
-    state = await wf.invoke(req.message, thread_id)
+    state = await wf.invoke(req.message, thread_id, filters=req.filters)
     # final_ai_response = state.get("final_ai_response", "")
     # route = state.get("route", "")
     # return WorkflowResponse(answer=final_ai_response, route=route)
@@ -80,7 +80,7 @@ async def chat_stream(req: ChatRequest, wf: WorkflowService = Depends(get_workfl
 
     async def gen():
         try:
-            async for ev in wf.astream(req.message, thread_id):
+            async for ev in wf.astream(req.message, thread_id, filters=req.filters):
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
         except Exception as e:  # lỗi giữa chừng -> báo 1 event ERROR rồi đóng stream
             logger.exception("Stream workflow failed thread=%s", thread_id)

@@ -24,6 +24,5 @@ cachetools
 pycryptodomex
 strenum
 google-genai
-# Embeddings chạy qua Ollama (xem src/core/embedder.py) -> KHÔNG cần
-# torch / sentence-transformers / langchain-huggingface trong app image.
 typing_extensions
+python-docx

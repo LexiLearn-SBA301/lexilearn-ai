@@ -82,10 +82,11 @@ if __name__ == "__main__":
         help="Kích hoạt dịch vụ nạp dữ liệu IngestService bất đồng bộ."
     )
     parser.add_argument(
-        "--pdf", 
+        "--file", "--pdf",
+        dest="file_path",
         type=str, 
         default="docs", 
-        help="Đường dẫn đến file PDF đơn lẻ hoặc thư mục chứa các file PDF cần nạp (mặc định: 'docs')."
+        help="Đường dẫn đến file PDF/DOCX đơn lẻ hoặc thư mục chứa các file cần nạp (mặc định: 'docs')."
     )
     parser.add_argument(
         "--query",
@@ -119,12 +120,12 @@ if __name__ == "__main__":
         from services.ingest_service import IngestService
         
         print("=" * 80)
-        print(f"KHỞI ĐỘNG TIẾN TRÌNH INGESTION CHO: {args.pdf}")
+        print(f"KHỞI ĐỘNG TIẾN TRÌNH INGESTION CHO: {args.file_path}")
         print("=" * 80)
         
         try:
             service = IngestService()
-            job_id = service.start_ingestion(args.pdf, use_llm_corrector=args.use_llm_corrector)
+            job_id = service.start_ingestion(args.file_path, use_llm_corrector=args.use_llm_corrector)
             print(f"Đã khởi tạo Job nạp dữ liệu bất đồng bộ thành công.")
             print(f"Mã Job ID: {job_id}")
             print("Đang chạy ngầm và theo dõi tiến độ, vui lòng không tắt CMD...")
