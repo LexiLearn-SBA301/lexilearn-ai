@@ -112,6 +112,7 @@ class TestIngestService:
     @patch("services.ingest_service.os.path.isfile", return_value=True)
     @patch("services.ingest_service.os.path.isdir", return_value=False)
     @patch("services.ingest_service.PDFReader")
+    @patch("services.ingest_service.DocxReader")
     @patch("services.ingest_service.StructureDetector")
     @patch("services.ingest_service.SemanticChunker")
     @patch("services.ingest_service.ChunkValidator")
@@ -124,6 +125,7 @@ class TestIngestService:
         mock_validator_cls,
         mock_chunker_cls,
         mock_detector_cls,
+        mock_docx_reader_cls,
         mock_reader_cls,
         mock_isfile,
         mock_isdir,
@@ -133,7 +135,8 @@ class TestIngestService:
         """Test the synchronous execution of the background task on success."""
         mock_db = MagicMock()
         mock_get_db.return_value = mock_db
-        mock_collection = mock_db["ingestion_jobs"]
+        mock_collection = MagicMock()
+        mock_db.__getitem__.side_effect = lambda k: mock_collection if k == "ingestion_jobs" else MagicMock()
 
         # Setup mock pipeline components
         mock_reader = mock_reader_cls.return_value
@@ -195,6 +198,7 @@ class TestIngestService:
     @patch("services.ingest_service.os.path.isfile", return_value=True)
     @patch("services.ingest_service.os.path.isdir", return_value=False)
     @patch("services.ingest_service.PDFReader")
+    @patch("services.ingest_service.DocxReader")
     @patch("services.ingest_service.StructureDetector")
     @patch("services.ingest_service.SemanticChunker")
     @patch("services.ingest_service.ChunkValidator")
@@ -207,6 +211,7 @@ class TestIngestService:
         mock_validator_cls,
         mock_chunker_cls,
         mock_detector_cls,
+        mock_docx_reader_cls,
         mock_reader_cls,
         mock_isfile,
         mock_isdir,
@@ -216,7 +221,8 @@ class TestIngestService:
         """Test that background task handles exceptions, records them, and marks job as error."""
         mock_db = MagicMock()
         mock_get_db.return_value = mock_db
-        mock_collection = mock_db["ingestion_jobs"]
+        mock_collection = MagicMock()
+        mock_db.__getitem__.side_effect = lambda k: mock_collection if k == "ingestion_jobs" else MagicMock()
 
         # Mock PDFReader to crash
         mock_reader = mock_reader_cls.return_value
