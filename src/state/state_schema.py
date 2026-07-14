@@ -213,6 +213,7 @@ class BulletinEntry(BaseModel):
     critic: CriticRole
     thesis: str
     key_points: list[str] = Field(default_factory=list)
+    supports: list[str] = Field(default_factory=list)   # lý lẽ của từng luận điểm (song song key_points)
     arg_ids: list[str] = Field(default_factory=list)
 
 

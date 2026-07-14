@@ -15,13 +15,21 @@ from langchain_core.messages import AIMessage
 
 from agents.critics_debate import (
     CRITIC_ORDER,
-    _resolve_arg_id,
     _speak_r1,
+    _target_from_arg_id,
     build_debate_subgraph,
+    build_r1_prompt,
+    build_r2_prompt,
     critics_debate,
 )
 from agents.debate_schemas import CriticR1Out, CriticR2Out, _ArgIn, _RebuttalIn
-from state.state_schema import CriticRole, DebateState, PreparedContext, SourceChunk
+from state.state_schema import (
+    BulletinEntry,
+    CriticRole,
+    DebateState,
+    PreparedContext,
+    SourceChunk,
+)
 
 
 class _FakeStructured:
@@ -39,9 +47,9 @@ class _FakeStructured:
             )
         if self.schema is CriticR2Out:
             # nhắm tới tất cả role; assembly tự bỏ self -> mỗi critic còn 3 rebuttal.
-            # target_point=1 -> server map thành arg_id "{target}-a1" (a1 luôn tồn tại).
+            # arg_id "{target}-a1" luôn có thật (mỗi critic R1 nêu 2 luận điểm).
             return CriticR2Out(rebuttals=[
-                _RebuttalIn(target_critic=r, target_point=1, stance="disagree",
+                _RebuttalIn(target_arg_id=f"{r.value}-a1", stance="disagree",
                             reason=f"Phản biện {r.value}")
                 for r in CRITIC_ORDER
             ])
@@ -97,17 +105,89 @@ def test_subgraph_full_debate():
         assert turn.rebuttals
         for reb in turn.rebuttals:
             assert reb.target_critic != role
-            # target_point=1 -> id THẬT "{target}-a1" (không phải id bịa)
+            # target_critic PHẢI suy ra từ chính id -> không thể lệch nhau
             assert reb.target_arg_id == f"{reb.target_critic.value}-a1"
 
 
-def test_resolve_arg_id_chong_bia():
+def test_target_from_arg_id_chong_bia():
     valid = {"tam_ly-a1", "tam_ly-a2", "lich_su-a1"}
-    assert _resolve_arg_id(CriticRole.TAM_LY, 2, valid) == "tam_ly-a2"   # hợp lệ
-    assert _resolve_arg_id(CriticRole.TAM_LY, 3, valid) is None          # ngoài range -> None
-    assert _resolve_arg_id(CriticRole.LICH_SU, 2, valid) is None         # critic có nhưng point vượt
-    assert _resolve_arg_id(CriticRole.TAM_LY, None, valid) is None       # model không chọn
-    assert _resolve_arg_id(CriticRole.TAM_LY, 0, valid) is None          # số lạ
+    assert _target_from_arg_id("tam_ly-a2", valid) == CriticRole.TAM_LY  # hợp lệ
+    assert _target_from_arg_id("tam_ly-a3", valid) is None               # ngoài range
+    assert _target_from_arg_id("lich_su-a2", valid) is None              # critic có, luận điểm không
+    assert _target_from_arg_id("", valid) is None                        # model không chọn
+    assert _target_from_arg_id("critic_la-a1", valid) is None            # role lạ
+
+
+def test_target_from_arg_id_chap_nhan_ngoac_vuong():
+    """Qwen chép id KÈM ngoặc vuông từ bảng tin ('[lich_su-a1]') -> phải khớp, không bị loại.
+
+    Ca hỏng thật: bảng tin in '[lich_su-a1]', prompt bảo "chép nguyên văn id trong ngoặc
+    vuông", Qwen trả '[lich_su-a1]' -> so với arg_ids (không ngoặc) trượt hết -> cả 4 critic
+    mất sạch rebuttal -> vòng 2 rỗng, FE trông y như vòng 1.
+    """
+    valid = {"lich_su-a1", "hinh_thuc-a2"}
+    assert _target_from_arg_id("[lich_su-a1]", valid) == CriticRole.LICH_SU
+    assert _target_from_arg_id("  [hinh_thuc-a2] ", valid) == CriticRole.HINH_THUC
+    assert _target_from_arg_id("LICH_SU-A1", valid) == CriticRole.LICH_SU   # model viết hoa
+    assert _target_from_arg_id("[tam_ly-a9]", valid) is None                # vẫn chặn id bịa
+
+
+def test_rebuttal_khong_the_gan_sai_critic():
+    """Hồi quy: reason bắt bẻ luận điểm của Lịch sử thì KHÔNG thể bị gắn nhãn Tiếp nhận.
+
+    Ca hỏng cũ: model điền tách rời (target_critic=tiep_nhan, target_point=2) trong khi
+    reason đang nói về luận điểm của Lịch sử -> "tiep_nhan-a2" vẫn tồn tại nên lọt validate,
+    FE in "Trả lời Tiếp nhận". Nay attribution suy TỪ id nên hai thứ không thể lệch.
+    """
+    valid = {"lich_su-a2", "tiep_nhan-a2"}
+    assert _target_from_arg_id("lich_su-a2", valid) == CriticRole.LICH_SU
+
+
+def test_r1_prompt_co_de_bai():
+    """R1 phải thấy câu hỏi gốc, nếu không 4 critic phân tích chung chung, không bám đề."""
+    p = build_r1_prompt(
+        CriticRole.TAM_LY, "Tỏ lòng", "Phạm Ngũ Lão", "Tóm tắt", _chunks(),
+        question="Phân tích hình ảnh người tráng sĩ trong Tỏ lòng",
+    )
+    assert "Phân tích hình ảnh người tráng sĩ trong Tỏ lòng" in p
+
+
+def test_r2_prompt_co_de_bai_van_ban_goc_va_ly_le():
+    """R2 phải có ĐỀ BÀI + VĂN BẢN GỐC + lý lẽ (support) của luận điểm bị nhắm tới.
+
+    Thiếu văn bản gốc -> critic không đối chiếu được dẫn chứng; thiếu support -> luận điểm
+    chỉ là khẳng định trần trụi, không có gì để bắt bẻ. Cả hai đều đẩy R2 về chỗ nhắc lại
+    luận đề của chính mình thay vì phản biện.
+    """
+    bulletin = [
+        BulletinEntry(
+            critic=CriticRole.LICH_SU,
+            thesis="Luận đề Lịch sử",
+            key_points=["Tác phẩm phản ánh tinh thần tự cường"],
+            supports=["Dựa vào hình ảnh ba vạn quân trong đoạn c1"],
+            arg_ids=["lich_su-a1"],
+        ),
+    ]
+    p = build_r2_prompt(
+        CriticRole.TAM_LY, "Luận đề Tâm lý", bulletin, _chunks(),
+        question="Phân tích hình ảnh người tráng sĩ trong Tỏ lòng",
+    )
+    assert "Phân tích hình ảnh người tráng sĩ trong Tỏ lòng" in p   # đề bài
+    assert "Đoạn văn mẫu 1 của tác phẩm." in p                      # văn bản gốc
+    assert "[lich_su-a1]" in p                                      # id để chép
+    assert "Dựa vào hình ảnh ba vạn quân trong đoạn c1" in p        # lý lẽ để bắt bẻ
+
+
+def test_r2_prompt_chiu_duoc_bulletin_cu_khong_co_supports():
+    """Bulletin trong checkpoint CŨ chưa có field supports -> vẫn phải render đủ luận điểm."""
+    bulletin = [
+        BulletinEntry(critic=CriticRole.LICH_SU, thesis="Luận đề",
+                      key_points=["Điểm A", "Điểm B"],
+                      arg_ids=["lich_su-a1", "lich_su-a2"]),   # supports = [] (mặc định)
+    ]
+    p = build_r2_prompt(CriticRole.TAM_LY, "th", bulletin, _chunks())
+    assert "[lich_su-a1] Điểm A" in p
+    assert "[lich_su-a2] Điểm B" in p
 
 
 def test_public_node_reads_context_and_builds_debatestate():

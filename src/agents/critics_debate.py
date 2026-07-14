@@ -71,6 +71,7 @@ MIN_R1_ARGS = 2   # mỗi critic R1 tối thiểu 2 luận điểm (để R2 có
 # =============================================================================
 
 class DebateSubState(TypedDict, total=False):
+    question: str                     # ĐỀ BÀI: câu hỏi gốc của người dùng — cả 2 vòng phải bám
     work_title: Optional[str]
     author: Optional[str]
     context_summary: str
@@ -115,17 +116,31 @@ async def _fallback_text(llm, msgs) -> str:
         return f"[lỗi gọi model: {e}]"
 
 
-def _resolve_arg_id(target: CriticRole, point: Optional[int],
-                    valid_ids: set[str]) -> Optional[str]:
-    """Ghép (critic, SỐ thứ tự luận điểm) -> arg_id; None nếu số không hợp lệ.
+def _normalize_arg_id(raw: str) -> str:
+    """Chuẩn hoá id model trả về trước khi tra bulletin.
 
-    Chống 3B bịa id: model chỉ CHỌN số, server dựng id theo quy tắc "{role}-a{i}"
-    rồi kiểm tra id đó có thật trong bulletin không. Sai/thiếu -> None (không tạo id rác).
+    Bảng tin in id trong ngoặc vuông ("[lich_su-a1]") cho dễ đọc, và Qwen chép NGUYÊN CẢ
+    NGOẶC. So thẳng với arg_ids (không ngoặc) sẽ trượt 100% -> mọi rebuttal bị loại ->
+    vòng 2 rỗng trơn. Nhận cả 2 dạng thay vì bắt model đoán ý.
     """
-    if not point or point < 1:
+    return (raw or "").strip().strip("[]").strip().lower()
+
+
+def _target_from_arg_id(arg_id: str, valid_ids: set[str]) -> Optional[CriticRole]:
+    """arg_id ("lich_su-a2" hoặc "[lich_su-a2]") -> critic BỊ phản biện; None nếu id không có thật.
+
+    Attribution suy TỪ id, không tin field riêng của model: khi model điền tách rời
+    (target_critic, target_point) thì 2 field có thể lệch nhau mà validate không bắt được
+    (số thứ tự luận điểm reset theo từng critic -> "point 2" của critic nào cũng tồn tại),
+    sinh ra ca "bắt bẻ luận điểm của Lịch sử nhưng FE in là Trả lời Tiếp nhận".
+    """
+    aid = _normalize_arg_id(arg_id)
+    if aid not in valid_ids:
         return None
-    candidate = f"{target.value}-a{point}"
-    return candidate if candidate in valid_ids else None
+    try:
+        return CriticRole(aid.rsplit("-a", 1)[0])
+    except ValueError:
+        return None
 
 
 # =============================================================================
@@ -146,6 +161,16 @@ def _render_chunks(chunks: list[SourceChunk]) -> str:
     return "\n".join(lines)
 
 
+def _question_block(question: str) -> str:
+    """Đề bài của người dùng — đặt ĐẦU prompt ở CẢ 2 vòng.
+
+    Thiếu khối này, 4 critic phân tích tác phẩm chung chung theo chuyên môn của mình
+    thay vì trả lời đúng câu người dùng hỏi.
+    """
+    q = (question or "").strip()
+    return f"CÂU HỎI CỦA NGƯỜI DÙNG (bám sát yêu cầu này):\n{q}\n\n" if q else ""
+
+
 def build_r1_prompt(
     role: CriticRole,
     work_title: str | None,
@@ -153,10 +178,11 @@ def build_r1_prompt(
     context_summary: str,
     chunks: list[SourceChunk],
     judge_feedback: str = "",
+    question: str = "",
 ) -> str:
-    """Human prompt vòng 1: critic đọc đoạn văn bản chung + tóm tắt Tool 1 rồi nêu luận điểm."""
+    """Human prompt vòng 1: critic đọc đề bài + đoạn văn bản chung + tóm tắt Tool 1 rồi nêu luận điểm."""
     display = CRITIC_DISPLAY[role]
-    header = f"Tác phẩm: {work_title or '(chưa rõ)'}"
+    header = f"{_question_block(question)}Tác phẩm: {work_title or '(chưa rõ)'}"
     if author:
         header += f" — Tác giả: {author}"
     ctx = (context_summary or "").strip()
@@ -176,7 +202,8 @@ def build_r1_prompt(
         f"Các đoạn văn bản gốc (dùng làm dẫn chứng):\n"
         f"{_render_chunks(chunks)}\n\n"
         f"Nhiệm vụ ({display}):\n"
-        f"- Nêu 1 luận đề (thesis) ngắn gọn thể hiện góc nhìn chuyên môn của bạn.\n"
+        f"- Nêu 1 luận đề (thesis) ngắn gọn, trả lời thẳng CÂU HỎI CỦA NGƯỜI DÙNG từ "
+        f"góc nhìn chuyên môn của bạn.\n"
         f"- BẮT BUỘC đưa ra ÍT NHẤT {MIN_R1_ARGS} luận điểm;"
         f" Mỗi luận điểm  gồm 'point' (khẳng định) và 'support' (diễn giải, bám vào dẫn chứng ở trên). "
         f"KHÔNG để trống danh sách luận điểm.\n"
@@ -190,7 +217,19 @@ def _render_bulletin(bulletin: list[BulletinEntry], exclude: CriticRole) -> str:
     for e in bulletin:
         if e.critic == exclude:
             continue
-        pts = "\n".join(f"  {i}. {p}" for i, p in enumerate(e.key_points, 1)) or "  (không có luận điểm)"
+        # Hiện arg_id (duy nhất toàn bảng tin) thay cho số thứ tự (reset theo từng critic,
+        # dễ lẫn giữa các khối) -> model chỉ việc CHÉP LẠI id, không phải tự ghép critic + số.
+        # Kèm 'Lý lẽ' (support): critic phải ĐỌC ĐƯỢC lập luận thì mới bắt bẻ được nó; chỉ
+        # đưa khẳng định trần trụi -> R2 không có gì để phản biện, quay ra nhắc lại luận đề mình.
+        lines = []
+        for i, (aid, p) in enumerate(zip(e.arg_ids, e.key_points)):
+            # tra supports theo index (không zip 3 chiều): bulletin lưu trong checkpoint CŨ
+            # chưa có field supports -> zip sẽ cắt cụt cả bảng tin về rỗng.
+            s = e.supports[i] if i < len(e.supports) else ""
+            lines.append(f"  [{aid}] {p}")
+            if s:
+                lines.append(f"      Lý lẽ: {s}")
+        pts = "\n".join(lines) or "  (không có luận điểm)"
         blocks.append(
             f"### {CRITIC_DISPLAY[e.critic]} ({e.critic.value})\n"
             f"Luận đề: {e.thesis}\n{pts}"
@@ -202,20 +241,37 @@ def build_r2_prompt(
     role: CriticRole,
     own_thesis: str,
     bulletin: list[BulletinEntry],
+    chunks: list[SourceChunk],
+    question: str = "",
 ) -> str:
-    """Human prompt vòng 2: critic đọc Bulletin chung rồi phản biện chéo 3 critic KHÁC."""
+    """Human prompt vòng 2: critic đọc lại ĐỀ BÀI + VĂN BẢN GỐC + Bulletin rồi phản biện 3 critic KHÁC.
+
+    chunks BẮT BUỘC có mặt: thiếu văn bản gốc, critic không đối chiếu được dẫn chứng nên
+    chỉ còn nước phát biểu lại luận đề vòng 1 của mình -> "phản biện" hoá ra là nêu quan
+    điểm cá nhân, không bắt bẻ được ai.
+    """
     display = CRITIC_DISPLAY[role]
-    others = [e.critic.value for e in bulletin if e.critic != role]
-    targets = ", ".join(others) if others else "(không có)"
     return (
+        f"{_question_block(question)}"
+        f"VĂN BẢN GỐC (nguồn dẫn chứng DUY NHẤT — mọi phản biện phải đối chiếu với đây):\n"
+        f"{_render_chunks(chunks)}\n\n"
         f"Luận đề vòng 1 của chính bạn ({display}):\n{own_thesis or '(trống)'}\n\n"
-        f"BẢNG TIN CHUNG — luận đề & luận điểm của các nhà phê bình KHÁC:\n"
+        f"BẢNG TIN CHUNG — luận đề & luận điểm của các nhà phê bình KHÁC.\n"
+        f"Mỗi luận điểm có một ID trong ngoặc vuông, vd [lich_su-a2]:\n"
         f"{_render_bulletin(bulletin, role)}\n\n"
-        f"Nhiệm vụ ({display}):\n"
-        f"- Phản biện các nhà phê bình KHÁC (KHÔNG phản biện chính mình).\n"
-        f"- Mỗi phản biện gồm: 'target_critic' (chọn trong: {targets}), 'target_point' "
-        f"(SỐ THỨ TỰ luận điểm của critic đó mà bạn nhắm tới, theo bảng tin trên), 'stance' "
-        f"(agree | disagree | qualify), và 'reason' (lý do ngắn, bám chuyên môn của bạn).\n"
+        f"Nhiệm vụ ({display}) — PHẢN BIỆN, không phải trình bày lại quan điểm của bạn:\n"
+        f"- Với mỗi luận điểm bạn nhắm tới, hãy KIỂM TRA nó bằng VĂN BẢN GỐC ở trên: lý lẽ "
+        f"của họ có được văn bản chống đỡ không? Họ có suy diễn điều văn bản không nói, "
+        f"đọc sai chi tiết, hay bỏ sót chi tiết làm họ sai không?\n"
+        f"- 'reason' phải CHỈ RA CHỖ HỎNG trong lập luận CỦA HỌ và trích cụm từ/câu cụ thể "
+        f"trong văn bản gốc làm bằng. CẤM chỉ nhắc lại luận đề của bạn rồi coi đó là phản "
+        f"biện (vd 'bài thơ thật ra nói về X' mà không đụng tới lý lẽ của họ).\n"
+        f"- Nếu lý lẽ của họ ĐỨNG VỮNG trước văn bản, hãy dùng stance 'agree' và nói rõ vì "
+        f"sao nó đứng vững — đừng phản đối lấy lệ.\n"
+        f"- Mỗi phản biện gồm: 'target_arg_id' (CHÉP NGUYÊN VĂN id trong ngoặc vuông của "
+        f"luận điểm bạn nhắm tới — phải là id CÓ THẬT trong bảng tin trên, KHÔNG tự bịa, "
+        f"KHÔNG dùng id của chính bạn), 'stance' (agree | disagree | qualify), và 'reason'.\n"
+        f"- 'reason' phải nói đúng về luận điểm mang id bạn đã chọn.\n"
         f"- Đưa ra 2–3 phản biện.\n"
         f"- Viết bằng tiếng Việt."
     )
@@ -235,6 +291,7 @@ async def _speak_r1(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
             state.get("context_summary", ""),
             state.get("chunks", []),
             state.get("judge_feedback", ""),
+            state.get("question", ""),
         )),
     ]
     try:
@@ -266,24 +323,39 @@ async def _speak_r1(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
         )
 
 
-async def _speak_r2(role: CriticRole, own_thesis: str,
-                    bulletin: list[BulletinEntry], llm) -> CriticTurn:
+async def _speak_r2(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
+    own = state.get("round1", {}).get(role)
+    own_thesis = own.thesis if own else ""
+    bulletin = state.get("bulletin", [])
     msgs = [
         SystemMessage(content=CRITIC_PERSONAS[role]),
-        HumanMessage(content=build_r2_prompt(role, own_thesis, bulletin)),
+        HumanMessage(content=build_r2_prompt(
+            role, own_thesis, bulletin,
+            state.get("chunks", []),
+            state.get("question", ""),
+        )),
     ]
     try:
         out: CriticR2Out = await llm.with_structured_output(CriticR2Out).ainvoke(msgs)
         valid_arg_ids = {aid for e in bulletin for aid in e.arg_ids}
-        rebs = [
-            Rebuttal(
-                target_critic=r.target_critic,
-                target_arg_id=_resolve_arg_id(r.target_critic, r.target_point, valid_arg_ids),
+        rebs = []
+        for r in out.rebuttals:
+            target = _target_from_arg_id(r.target_arg_id, valid_arg_ids)
+            # id bịa (không có trong bulletin) hoặc id của chính mình -> bỏ hẳn phản biện đó,
+            # KHÔNG đoán bừa critic bị nhắm: đoán sai chính là ca gắn nhầm người ở FE.
+            if target is None or target == role:
+                logger.warning("R2 %s: BỎ phản biện, target_arg_id=%r không khớp bulletin %s",
+                               role.value, r.target_arg_id, sorted(valid_arg_ids))
+                continue
+            rebs.append(Rebuttal(
+                target_critic=target, target_arg_id=_normalize_arg_id(r.target_arg_id),
                 stance=r.stance, reason=r.reason,
-            )
-            for r in out.rebuttals
-            if r.target_critic != role  # bỏ trường hợp model lỡ tự phản biện mình
-        ]
+            ))
+        if out.rebuttals and not rebs:
+            # Cả lượt bị loại sạch -> vòng 2 sẽ rỗng trơn trên FE (trông y hệt vòng 1).
+            # Log to để lần sau thấy ngay thay vì phải soi UI mới biết.
+            logger.warning("R2 %s: LOẠI SẠCH %d phản biện -> lượt này trống.",
+                           role.value, len(out.rebuttals))
         return CriticTurn(
             critic=role, round=2, bulletin_seen=True, thesis=own_thesis,
             rebuttals=rebs, raw_output=out.model_dump_json(),
@@ -365,9 +437,7 @@ def make_r1_node(role: CriticRole, llm):
 
 def make_r2_node(role: CriticRole, llm):
     async def _node(state: DebateSubState) -> dict:
-        own = state.get("round1", {}).get(role)
-        own_thesis = own.thesis if own else ""
-        turn = await _speak_r2(role, own_thesis, state.get("bulletin", []), llm)
+        turn = await _speak_r2(role, state, llm)
         _emit_live_turn(safe_stream_writer(), role, 2, turn)
         return {"round2": {role: turn}}
     return _node
@@ -385,6 +455,7 @@ def bulletin_node(state: DebateSubState) -> dict:
             critic=role,
             thesis=turn.thesis,
             key_points=[a.point for a in turn.arguments],
+            supports=[a.support for a in turn.arguments],
             arg_ids=[a.arg_id for a in turn.arguments],
         ))
     _emit_live_bulletin(safe_stream_writer(), bulletin)
@@ -477,7 +548,11 @@ async def critics_debate(state, *, subgraph=None) -> dict:
     intent = state.get("intent")
     context = state.get("context")
     judge_feedback = (state.get("last_feedback") or {}).get(Stage.CRITICS_DEBATE.value, "")
+    # Đề bài = human_message (câu người dùng gõ), KHÔNG dùng intent.raw_query: api/debate_router.py
+    # gán raw_query = work_title, lấy nhầm sẽ in "CÂU HỎI CỦA NGƯỜI DÙNG: Tỏ lòng".
+    # Cùng nguồn với write_essay.py và factual_node.py.
     sub_in: DebateSubState = {
+        "question": state.get("human_message", "") or "",
         "work_title": getattr(intent, "work_title", None),
         "author": getattr(intent, "author", None),
         "context_summary": getattr(context, "summary", "") or "",
