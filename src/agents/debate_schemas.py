@@ -11,11 +11,9 @@ TypedDict cho StateGraph.
 """
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
-from state.state_schema import CriticRole
 
 
 class _ArgIn(BaseModel):
@@ -29,8 +27,12 @@ class CriticR1Out(BaseModel):
 
 
 class _RebuttalIn(BaseModel):
-    target_critic: CriticRole
-    target_point: Optional[int] = None   # số thứ tự luận điểm của critic đó (theo bảng tin); server map -> arg_id
+    # CHỈ 1 field định danh mục tiêu: arg_id chép nguyên từ bảng tin (vd "lich_su-a2").
+    # Server suy target_critic TỪ id này. Trước đây model điền tách rời (target_critic,
+    # target_point) nên bắt bẻ luận điểm của critic A mà gắn nhãn critic B vẫn lọt: số
+    # thứ tự luận điểm reset về 1 ở MỖI critic, nên "point 2" của ai cũng có -> id ghép
+    # ra vẫn tồn tại, validate không bắt được. Gộp về 1 lựa chọn nguyên tử -> hết lệch.
+    target_arg_id: str = ""
     stance: Literal["agree", "disagree", "qualify"] = "qualify"
     reason: str = ""
 

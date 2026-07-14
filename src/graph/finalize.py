@@ -20,9 +20,27 @@ from datetime import datetime, timezone
 from langchain_core.messages import AIMessage
 
 from state.agent_state import AgentState
-from state.state_schema import EventEmitter, FinalOutput, Route, Stage, safe_stream_writer
+from state.state_schema import EventEmitter, FinalOutput, Route, Stage, Verdict, safe_stream_writer
 
 logger = logging.getLogger("rag-service.graph.finalize")
+
+
+def _no_context_answer(state: AgentState) -> str:
+    """Câu trả lời khi judge LOẠI context (kho không có tài liệu về tác phẩm được hỏi).
+
+    Thà nói thẳng là chưa có tài liệu, còn hơn đưa context sai tác phẩm ra làm câu trả lời.
+    """
+    intent = state.get("intent")
+    work = getattr(intent, "work_title", None) if intent else None
+    if work:
+        return (
+            f"Xin lỗi, kho tài liệu hiện chưa có tác phẩm “{work}” nên mình chưa thể phân tích "
+            "để tránh đưa thông tin sai. Bạn thử hỏi về một tác phẩm khác trong thư viện nhé."
+        )
+    return (
+        "Xin lỗi, mình không tìm thấy tài liệu phù hợp trong kho để phân tích câu hỏi này, "
+        "nên chưa thể trả lời để tránh đưa thông tin sai."
+    )
 
 
 def finalize(state: AgentState) -> dict:
@@ -32,8 +50,12 @@ def finalize(state: AgentState) -> dict:
     # Kiểu 1: dispatch theo route -> biết answer (+ citations/sources) nằm field nào.
     if route == Route.DEEP:
         essay = state.get("essay")
+        ctx_verdict = (state.get("judges") or {}).get(Stage.PREPARE_CONTEXT.value)
         if essay:
             answer = essay.full_text
+        elif ctx_verdict is not None and ctx_verdict.verdict == Verdict.REJECT:
+            # judge LOẠI context -> graph cắt thẳng tới đây, KHÔNG chạy debate/essay.
+            answer = _no_context_answer(state)
         else:
             ctx = state.get("context")
             answer = ctx.summary if ctx else "[Chưa có kết quả phân tích]"

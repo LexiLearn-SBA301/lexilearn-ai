@@ -16,7 +16,6 @@ Quan hệ cần nhớ:
 
 from __future__ import annotations
 
-import operator
 from typing import Annotated, Any, Literal, Optional
 from typing_extensions import TypedDict
 
@@ -34,6 +33,7 @@ from state.state_schema import (
     JudgeVerdict,
     FinalOutput,
     StreamEvent,
+    append_events,
     merge_dict,
     take_last,
     DEFAULT_RETRY_LIMITS,
@@ -70,11 +70,14 @@ class AgentState(TypedDict, total=False):
     essay:   Annotated[Optional[EssayDraft], take_last]      # <- agent3_result (Tool 3)
 
     # ===== 5. Judge / review + điều khiển retry =====
-    judges:        Annotated[dict[str, JudgeVerdict], merge_dict]   # keyed theo stage
-    retry_counts:  Annotated[dict[str, int], merge_dict]
+    # 4 field dưới TÍCH LŨY qua các lần retry TRONG 1 lượt chat -> phải xóa ở đầu lượt
+    # sau (init_state truyền None), nếu không quota retry và bài "tốt nhất" của câu hỏi
+    # trước sẽ dính sang câu hỏi sau (state persist theo thread_id).
+    judges:        Annotated[Optional[dict[str, JudgeVerdict]], merge_dict]   # keyed theo stage
+    retry_counts:  Annotated[Optional[dict[str, int]], merge_dict]
     retry_limits:  dict[str, int]                                  # GraphState: trần chống loop vô hạn, Static Config không có merge func
-    last_feedback: Annotated[dict[str, str], merge_dict]           # judge -> tool khi retry (retry có hướng)
-    best_attempts: Annotated[dict[str, dict], merge_dict]          # stage -> {"output":..., "score":float}; bản tốt nhất qua các lần retry
+    last_feedback: Annotated[Optional[dict[str, str]], merge_dict]           # judge -> tool khi retry (retry có hướng)
+    best_attempts: Annotated[Optional[dict[str, dict]], merge_dict]          # stage -> {"output":..., "score":float}; bản tốt nhất qua các lần retry
 
     # ===== 6. Tool tracking  (từ template) =====
     last_tool_called: Annotated[Optional[str], take_last]
@@ -90,12 +93,17 @@ class AgentState(TypedDict, total=False):
     final_output: Annotated[Optional[FinalOutput], take_last]  # GraphState: object đầy đủ citation + sources
 
     # ===== 9. Thinking realtime ra UI  (KHÁC messages) =====
-    events: Annotated[list[StreamEvent], operator.add]         # chỉ milestone; token đi kênh stream riêng
+    events: Annotated[Optional[list[StreamEvent]], append_events]  # chỉ milestone; token đi kênh stream riêng
     event_seq: Annotated[int, take_last]
 
 
 def init_state(human_message: str, thread_id: str, run_id: str, filters: Optional[dict] = None) -> AgentState:
-    """State khởi đầu cho 1 lần chạy."""
+    """State khởi đầu cho 1 lần chạy.
+
+    Graph chạy trên checkpoint CŨ của thread (persist theo thread_id), nên input này
+    phải XÓA hết kết quả lượt trước: None đi qua reducer = xóa field. Riêng `messages`
+    dùng add_messages -> nối vào lịch sử, KHÔNG xóa (đó là trí nhớ hội thoại).
+    """
     return AgentState(
         thread_id=thread_id,
         run_id=run_id,
@@ -111,11 +119,11 @@ def init_state(human_message: str, thread_id: str, run_id: str, filters: Optiona
         context=None,
         debate=None,
         essay=None,
-        judges={},
-        retry_counts={},
-        retry_limits=dict(DEFAULT_RETRY_LIMITS),   # {"prepare_context":2,"critics_debate":2,"write_essay":1}
-        last_feedback={},
-        best_attempts={},
+        judges=None,
+        retry_counts=None,
+        retry_limits=dict(DEFAULT_RETRY_LIMITS),   # {"prepare_context":0,"critics_debate":2,"write_essay":1}
+        last_feedback=None,
+        best_attempts=None,
         last_tool_called=None,
         tool_input=None,
         tool_result=None,
@@ -123,6 +131,6 @@ def init_state(human_message: str, thread_id: str, run_id: str, filters: Optiona
         #human_decision=None,
         final_ai_response="",
         final_output=None,
-        events=[],
+        events=None,
         event_seq=0,
     )

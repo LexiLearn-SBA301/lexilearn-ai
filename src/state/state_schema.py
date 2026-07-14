@@ -31,15 +31,26 @@ def merge_dict(left: Optional[dict], right: Optional[dict]) -> dict:
     """ left là dữ liệu cũ, right mới
         (left or {}) chống crash
         {A, B} lấy A và B gợp lại nếu trùng key B sẽ đè lên A
-        **A unpacket A và B để tiến hành merge """
-    return {**(left or {}), **(right or {})}
+        **A unpacket A và B để tiến hành merge
+        right=None -> XÓA SẠCH (init_state dùng để reset đầu mỗi lượt chat) """
+    if right is None:
+        return {}
+    return {**(left or {}), **right}
 
 def take_last(left: Any, right: Any) -> Any:
-    """Ghi đè: lấy giá trị mới nhất (dùng cho các field scalar do 1 node set)."""
-    return right if right is not None else left
+    """Ghi đè: lấy giá trị mới nhất (dùng cho các field scalar do 1 node set).
+
+    right=None -> xóa field. KHÔNG được giữ lại left: state persist theo thread_id,
+    nên "giữ left" nghĩa là kết quả lượt chat trước dính sang lượt sau.
+    """
+    return right
 
 
-# list events: append-only -> operator.add
+def append_events(left: Optional[list], right: Optional[list]) -> list:
+    """events: append-only trong 1 lượt; right=None -> xóa sạch (reset đầu lượt mới)."""
+    if right is None:
+        return []
+    return (left or []) + right
 
 
 # =============================================================================
@@ -202,6 +213,7 @@ class BulletinEntry(BaseModel):
     critic: CriticRole
     thesis: str
     key_points: list[str] = Field(default_factory=list)
+    supports: list[str] = Field(default_factory=list)   # lý lẽ của từng luận điểm (song song key_points)
     arg_ids: list[str] = Field(default_factory=list)
 
 
@@ -358,9 +370,9 @@ class GraphState(TypedDict, total=False):
 
 # Cấu hình mặc định gợi ý
 DEFAULT_RETRY_LIMITS: dict[str, int] = {
-    "prepare_context": 2,    # diagram: "No retry" (không giới hạn cứng) -> đặt trần an toàn
+    "prepare_context": 0,
     "critics_debate": 2,
-    "write_essay": 1,        # diagram: "No max 1"
+    "write_essay": 1,
 }
 
 
