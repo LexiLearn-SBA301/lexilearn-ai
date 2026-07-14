@@ -80,9 +80,30 @@ def _render_context(state: AgentState) -> str:
         return "(chưa có context — Tool 1 chưa chạy)"
     entities = ", ".join(e.name for e in ctx.entities) or "(không có)"
     themes = ", ".join(ctx.themes) or "(không có)"
+
+    # PHẢI kèm câu hỏi + tác phẩm ĐƯỢC HỎI + tác phẩm THẬT của chunks: không có 3 thứ này
+    # judge không có dữ liệu để chấm relevance, chỉ thấy tóm tắt khớp chunks -> luôn pass.
+    # Ca hỏng thật: hỏi "Sóng" (kho không có) -> Tool 1 lấy đại chunks ca dao -> judge cho
+    # relevance=1.0 -> Tool 2/3 bịa ra bài luận về Sóng từ nội dung ca dao.
+    intent = state.get("intent")
+    asked_work = getattr(intent, "work_title", None) if intent else None
+    #getattr(đối_tượng, "tên_thuộc_tính", giá_trị_mặc_định_nếu_không_có)
+    asked_author = getattr(intent, "author", None) if intent else None
+    question = (getattr(intent, "raw_query", None) if intent else None) or state.get("human_message", "")
+
+    works: dict[str, int] = {}
+    for c in ctx.chunks:
+        name = c.metadata.get("ten_tac_pham") or "(không rõ)"
+        works[name] = works.get(name, 0) + 1
+    works_line = ", ".join(f"{w} ({n} đoạn)" for w, n in works.items()) or "(không có đoạn trích nào)"
+
     return (
+        f"CÂU HỎI CỦA NGƯỜI DÙNG: {question}\n"
+        f"Tác phẩm được hỏi: {asked_work or '(không nêu đích danh)'}\n"
+        f"Tác giả được hỏi: {asked_author or '(không nêu)'}\n\n"
+        f"Tác phẩm THẬT của các đoạn trích lấy được: {works_line}\n"
+        f"Số đoạn trích (chunks): {len(ctx.chunks)}\n\n"
         f"Tóm tắt:\n{ctx.summary or '(trống)'}\n\n"
-        f"Số đoạn trích (chunks): {len(ctx.chunks)}\n"
         f"Entities: {entities}\n"
         f"Themes: {themes}"
     )

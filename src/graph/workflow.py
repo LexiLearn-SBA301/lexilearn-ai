@@ -35,9 +35,20 @@ def _route_supervisor_judge_debate(state: AgentState) -> str:
     return "debate" if verdict is not None and verdict.verdict == Verdict.RETRY else "write_essay"
 
 def _route_supervisor_judge_context(state: AgentState) -> str:
-    """Đọc verdict từ judge để quyết định context đã đủ chi tiết chưa."""
+    """Đọc verdict từ judge để quyết định context đã đủ chi tiết chưa.
+
+    REJECT = hết lượt retry mà context VẪN không dùng được (vd: kho tài liệu không có
+    tác phẩm được hỏi) -> đi thẳng finalize. Cho chạy tiếp debate/essay trên context
+    sai tác phẩm chỉ tạo ra bài luận bịa.
+    """
     verdict = state.get("judges", {}).get(Stage.PREPARE_CONTEXT.value)
-    return "prepare_context" if verdict is not None and verdict.verdict == Verdict.RETRY else "debate"
+    if verdict is None:
+        return "debate"
+    if verdict.verdict == Verdict.RETRY:
+        return "prepare_context"
+    if verdict.verdict == Verdict.REJECT:
+        return "finalize"
+    return "debate"
 
 def _route_supervisor_judge_essay(state: AgentState) -> str:
     """Đọc verdict từ judge để quyết định bài luận đã đạt chưa."""
@@ -78,7 +89,7 @@ def build_graph(checkpointer=None, rag_service=None):
     g.add_conditional_edges(
         "supervisor_judge_context",
         _route_supervisor_judge_context,
-        {"prepare_context": "prepare_context", "debate": "debate"},
+        {"prepare_context": "prepare_context", "debate": "debate", "finalize": "finalize"},
     )
     
     # Tool 2 -> Judge debate -> (retry | write_essay)

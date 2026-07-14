@@ -121,7 +121,7 @@ def init_state(human_message: str, thread_id: str, run_id: str, filters: Optiona
         essay=None,
         judges=None,
         retry_counts=None,
-        retry_limits=dict(DEFAULT_RETRY_LIMITS),   # {"prepare_context":2,"critics_debate":2,"write_essay":1}
+        retry_limits=dict(DEFAULT_RETRY_LIMITS),   # {"prepare_context":0,"critics_debate":2,"write_essay":1}
         last_feedback=None,
         best_attempts=None,
         last_tool_called=None,

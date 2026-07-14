@@ -369,9 +369,9 @@ class GraphState(TypedDict, total=False):
 
 # Cấu hình mặc định gợi ý
 DEFAULT_RETRY_LIMITS: dict[str, int] = {
-    "prepare_context": 2,    # diagram: "No retry" (không giới hạn cứng) -> đặt trần an toàn
+    "prepare_context": 0,
     "critics_debate": 2,
-    "write_essay": 1,        # diagram: "No max 1"
+    "write_essay": 1,
 }
 
 

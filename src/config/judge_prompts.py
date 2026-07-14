@@ -23,7 +23,11 @@ _CRITERIA: dict[Stage, str] = {
     Stage.PREPARE_CONTEXT: (
         f"{_JUDGE_BASE}\n\n"
         "Tiêu chí chấm Tool 1 (prepare_context) — \"Context có dùng được cho Tool 2 không?\":\n"
-        "- relevance: các đoạn trích (chunks) có liên quan tới tác phẩm/câu hỏi không.\n"
+        "- relevance: các đoạn trích (chunks) có liên quan tới tác phẩm/câu hỏi không. "
+        "So sánh 'Tác phẩm được hỏi' với 'Tác phẩm THẬT của các đoạn trích lấy được': nếu "
+        "câu hỏi nêu đích danh một tác phẩm mà KHÔNG đoạn trích nào thuộc tác phẩm đó thì "
+        "relevance = 0 và verdict = 'retry' — kho tài liệu lấy nhầm sang tác phẩm khác, "
+        "Tool 2 sẽ bịa ra phân tích. KHÔNG được vì tóm tắt viết trôi chảy mà cho pass.\n"
         "- coverage: các đoạn trích có đủ nội dung để 4 nhà phê bình ở Tool 2 phân tích "
         "không. Tool 2 phân tích TRỰC TIẾP trên đoạn trích thô, KHÔNG đọc entities/themes; "
         "vì vậy chấm coverage theo lượng và nội dung ĐOẠN TRÍCH liên quan, KHÔNG tính "
