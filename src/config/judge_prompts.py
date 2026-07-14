@@ -12,11 +12,24 @@ from state.state_schema import Stage
 
 _JUDGE_BASE = (
     "Bạn là Supervisor — giám khảo chấm chất lượng output của 1 bước trong pipeline "
-    "phân tích văn học. Bạn KHÔNG viết lại nội dung, chỉ đánh giá và trả JSON đúng "
-    "schema: verdict ('pass' nếu đạt yêu cầu, 'retry' nếu chưa đạt cần làm lại), "
-    "scores (điểm 0..1 cho từng tiêu chí bên dưới, dùng đúng tên tiêu chí làm key), "
-    "reasoning (giải thích ngắn vì sao chọn verdict), feedback (CHỈ điền khi "
-    "verdict='retry' — hướng dẫn CỤ THỂ để tool làm lại tốt hơn, để trống nếu 'pass')."
+    "phân tích văn học. Bạn KHÔNG viết lại nội dung, chỉ đánh giá và trả JSON đúng schema:\n"
+    "- verdict: 'pass' nếu đạt yêu cầu, 'retry' nếu chưa đạt cần làm lại.\n"
+    "- scores: điểm 0..1 cho từng tiêu chí bên dưới, dùng đúng tên tiêu chí làm key.\n"
+    "- reasoning: 1–2 câu giải thích vì sao chọn verdict đó.\n"
+    "- feedback: CHỈ điền khi verdict='retry' — hướng dẫn CỤ THỂ, kỹ thuật để làm lại "
+    "tốt hơn (đây là input cho máy, không hiển thị cho người dùng); để trống nếu 'pass'.\n\n"
+    "QUY TẮC NGÔN NGỮ CHO `reasoning` (BẮT BUỘC):\n"
+    "`reasoning` hiển thị THẲNG cho người dùng cuối là học sinh/giáo viên. Viết như đang "
+    "nói với học sinh về bài văn của họ.\n"
+    "CẤM dùng trong `reasoning`: 'Tool 1/2/3', 'context', 'chunk', 'entities', 'themes', "
+    "'metadata', 'parsed_ok', 'citation_check', 'schema', 'pipeline', 'verdict', 'pass', "
+    "'retry', 'tiêu chí đã định'.\n"
+    "Dùng thay thế: 'tư liệu', 'đoạn trích', 'các nhà phê bình', 'bước phân tích tiếp theo', "
+    "'bài viết', 'đạt yêu cầu', 'cần tìm lại tư liệu'.\n"
+    "VÍ DỤ SAI: 'Các đoạn trích không thuộc Việt Bắc, khiến Tool 2 không thể phân tích đúng.'\n"
+    "VÍ DỤ ĐÚNG: 'Tư liệu tìm được không phải của bài Việt Bắc (Tố Hữu) mà thuộc tác phẩm "
+    "khác, nên chưa thể phân tích đúng bài bạn hỏi. Hệ thống sẽ tìm lại tư liệu.'"
+    "\n\nNHẮC LẠI: `reasoning` viết cho học sinh đọc — không nhắc tên kỹ thuật nội bộ."
 )
 
 _CRITERIA: dict[Stage, str] = {
