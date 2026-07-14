@@ -34,7 +34,7 @@ class DebateTestRequest(BaseModel):
 
 
 @router.post("/test", response_model=DebateState)
-def debate_test(req: DebateTestRequest) -> DebateState:
+async def debate_test(req: DebateTestRequest) -> DebateState:
     """Chạy Tool 2 độc lập: dựng intent+context từ input rồi gọi critics_debate."""
     state = {
         "intent": IntentAnalysis(
@@ -48,5 +48,5 @@ def debate_test(req: DebateTestRequest) -> DebateState:
             chunks=req.chunks,
         ),
     }
-    delta = critics_debate(state)
+    delta = await critics_debate(state)
     return delta["debate"]

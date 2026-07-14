@@ -1,6 +1,7 @@
+import asyncio
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -65,7 +66,9 @@ def test_prepare_context_success():
     
     mock_llm = MagicMock()
     # Giả lập response từ Ollama trả về content dạng JSON
-    mock_llm.invoke.return_value.content = '{"summary": "Tóm tắt hay", "entities": [{"name": "Nhân vật A", "type": "character", "description": "desc"}], "themes": ["theme1"]}'
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(
+        content='{"summary": "Tóm tắt hay", "entities": [{"name": "Nhân vật A", "type": "character", "description": "desc"}], "themes": ["theme1"]}'
+    ))
 
     state = {
         "intent": IntentAnalysis(
@@ -81,7 +84,7 @@ def test_prepare_context_success():
     }
 
     with patch("agents.prepare_context.ollama_provider.get_llm", return_value=mock_llm):
-        out = prepare_context(state, rag)
+        out = asyncio.run(prepare_context(state, rag))
         
     assert out["current_stage"] == Stage.PREPARE_CONTEXT
     ctx = out["context"]

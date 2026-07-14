@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 from unittest.mock import patch
@@ -24,11 +25,15 @@ class MockRAGService:
 
 
 def _run_with_route(route: Route) -> dict:
-    """Ép supervisor ra 1 route cố định rồi chạy graph (không cần Gemini key)."""
+    """Ép supervisor ra 1 route cố định rồi chạy graph (không cần Gemini key).
+
+    ainvoke: graph có node async (prepare_context / debate / write_essay) nên chạy
+    bằng invoke() sync sẽ vỡ.
+    """
     with patch("agents.supervisor._classify",
                return_value=_Decision(route=route, reasoning="test")):
         app = build_graph(rag_service=MockRAGService())  # Inject mock RAG
-        return app.invoke(init_state("câu hỏi test", "t1", "r1"))
+        return asyncio.run(app.ainvoke(init_state("câu hỏi test", "t1", "r1")))
 
 
 def test_graph_routes_to_factual():

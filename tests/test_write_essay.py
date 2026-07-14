@@ -1,6 +1,7 @@
+import asyncio
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -53,20 +54,20 @@ def test_write_essay_success():
     
     mock_structured_llm = MagicMock()
     # Trả về object đúng chuẩn Pydantic mà Langchain Structured Output sẽ trả ra
-    mock_structured_llm.invoke.return_value = EssayLLMOutput(
+    mock_structured_llm.ainvoke = AsyncMock(return_value=EssayLLMOutput(
         thinking="Suy nghĩ lập dàn ý",
         title="Tiêu đề hay và nghệ thuật",
         sections=[
             EssaySectionOut(heading="Mở bài", body="Đoạn mở đầu có sức hút."),
             EssaySectionOut(heading="Thân bài", body="Nội dung chính phân tích đa chiều."),
         ]
-    )
+    ))
 
     mock_llm = MagicMock()
     mock_llm.with_structured_output.return_value = mock_structured_llm
 
     with patch("agents.write_essay.ollama_provider.get_llm", return_value=mock_llm):
-        out = write_essay(state)
+        out = asyncio.run(write_essay(state))
         
     assert out["current_stage"] == Stage.WRITE_ESSAY
     assert out["current_node"] == "write_essay"
@@ -87,13 +88,13 @@ def test_write_essay_fallback_on_error():
     }
     
     mock_structured_llm = MagicMock()
-    mock_structured_llm.invoke.side_effect = Exception("Model JSON parse error")
-    
+    mock_structured_llm.ainvoke = AsyncMock(side_effect=Exception("Model JSON parse error"))
+
     mock_llm = MagicMock()
     mock_llm.with_structured_output.return_value = mock_structured_llm
 
     with patch("agents.write_essay.ollama_provider.get_llm", return_value=mock_llm):
-        out = write_essay(state)
+        out = asyncio.run(write_essay(state))
         
     # Cần fallback trả về lỗi chứ không văng exception làm sập luồng
     essay = out["essay"]

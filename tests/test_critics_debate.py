@@ -5,6 +5,7 @@ Tool 2 KHÔNG retrieve: đoạn văn bản chung được truyền vào (mô ph�
 Kiểm: 4 critic R1 đọc chung chunks -> bulletin 4 entry -> 4 critic R2 đều có
 rebuttal và không tự phản biện mình -> node public ráp DebateState, total=8.
 """
+import asyncio
 import os
 import sys
 
@@ -27,7 +28,7 @@ class _FakeStructured:
     def __init__(self, schema):
         self.schema = schema
 
-    def invoke(self, messages):
+    async def ainvoke(self, messages):
         if self.schema is CriticR1Out:
             return CriticR1Out(
                 thesis="Luận đề mock",
@@ -51,7 +52,7 @@ class FakeLLM:
     def with_structured_output(self, schema):
         return _FakeStructured(schema)
 
-    def invoke(self, messages):
+    async def ainvoke(self, messages):
         return AIMessage(content="raw fallback")
 
 
@@ -75,7 +76,7 @@ def _sub_input():
 
 def test_subgraph_full_debate():
     app = build_debate_subgraph(FakeLLM())
-    out = app.invoke(_sub_input())
+    out = asyncio.run(app.ainvoke(_sub_input()))
 
     # 4 critic R1, đều parse OK
     assert set(out["round1"].keys()) == set(CRITIC_ORDER)
@@ -116,7 +117,7 @@ def test_public_node_reads_context_and_builds_debatestate():
         "context": PreparedContext(summary="Tóm tắt", chunks=_chunks()),
     }
 
-    delta = critics_debate(state, subgraph=app)
+    delta = asyncio.run(critics_debate(state, subgraph=app))
 
     debate = delta["debate"]
     assert isinstance(debate, DebateState)
@@ -135,13 +136,13 @@ def test_speak_r1_retries_until_min_arguments():
         def with_structured_output(self, schema):
             return self
 
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             self.calls += 1
             k = 1 if self.calls == 1 else 2      # lần đầu 1 luận điểm, lần 2 đủ 2
             return CriticR1Out(thesis="th", arguments=[_ArgIn(point=f"p{i}") for i in range(k)])
 
     llm = _RetryLLM()
-    turn = _speak_r1(CriticRole.TAM_LY, {"chunks": []}, llm)
+    turn = asyncio.run(_speak_r1(CriticRole.TAM_LY, {"chunks": []}, llm))
     assert llm.calls == 2                 # đã retry đúng 1 lần
     assert len(turn.arguments) == 2       # cuối cùng đạt >= 2
     assert turn.parsed_ok is True

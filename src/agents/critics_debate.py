@@ -108,9 +108,9 @@ def _extract_text(content: Any) -> str:
     return str(content).strip()
 
 
-def _fallback_text(llm, msgs) -> str:
+async def _fallback_text(llm, msgs) -> str:
     try:
-        return _extract_text(llm.invoke(msgs).content)
+        return _extract_text((await llm.ainvoke(msgs)).content)
     except Exception as e:  # pragma: no cover - đường lỗi kép
         return f"[lỗi gọi model: {e}]"
 
@@ -225,7 +225,7 @@ def build_r2_prompt(
 # "Nói" 1 lượt critic (gọi LLM structured + ráp CriticTurn, có fallback)
 # =============================================================================
 
-def _speak_r1(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
+async def _speak_r1(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
     msgs = [
         SystemMessage(content=CRITIC_PERSONAS[role]),
         HumanMessage(content=build_r1_prompt(
@@ -239,11 +239,11 @@ def _speak_r1(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
     ]
     try:
         structured = llm.with_structured_output(CriticR1Out)
-        out: CriticR1Out = structured.invoke(msgs)
+        out: CriticR1Out = await structured.ainvoke(msgs)
         if len(out.arguments) < MIN_R1_ARGS:
             # temp=0 -> retry y hệt prompt sẽ lặp kết quả; kèm câu nhắc (đổi input) để thử thêm 1 lần.
             logger.info("R1 %s chỉ %d luận điểm -> nhắc lại 1 lần", role.value, len(out.arguments))
-            retry = structured.invoke(msgs + [HumanMessage(content=(
+            retry = await structured.ainvoke(msgs + [HumanMessage(content=(
                 f"Bạn mới nêu {len(out.arguments)} luận điểm. BẮT BUỘC nêu ĐỦ tối thiểu "
                 f"{MIN_R1_ARGS} luận điểm, mỗi luận điểm có 'point' và 'support' bám dẫn chứng."
             ))])
@@ -259,21 +259,21 @@ def _speak_r1(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
         )
     except Exception as e:
         logger.warning("R1 %s structured lỗi (%s) -> fallback text", role.value, e)
-        raw = _fallback_text(llm, msgs)
+        raw = await _fallback_text(llm, msgs)
         return CriticTurn(
             critic=role, round=1, thesis=raw[:500],
             raw_output=raw, parsed_ok=False, spoke_at=_now(),
         )
 
 
-def _speak_r2(role: CriticRole, own_thesis: str,
-              bulletin: list[BulletinEntry], llm) -> CriticTurn:
+async def _speak_r2(role: CriticRole, own_thesis: str,
+                    bulletin: list[BulletinEntry], llm) -> CriticTurn:
     msgs = [
         SystemMessage(content=CRITIC_PERSONAS[role]),
         HumanMessage(content=build_r2_prompt(role, own_thesis, bulletin)),
     ]
     try:
-        out: CriticR2Out = llm.with_structured_output(CriticR2Out).invoke(msgs)
+        out: CriticR2Out = await llm.with_structured_output(CriticR2Out).ainvoke(msgs)
         valid_arg_ids = {aid for e in bulletin for aid in e.arg_ids}
         rebs = [
             Rebuttal(
@@ -291,7 +291,7 @@ def _speak_r2(role: CriticRole, own_thesis: str,
         )
     except Exception as e:
         logger.warning("R2 %s structured lỗi (%s) -> fallback text", role.value, e)
-        raw = _fallback_text(llm, msgs)
+        raw = await _fallback_text(llm, msgs)
         return CriticTurn(
             critic=role, round=2, bulletin_seen=True, thesis=own_thesis,
             rebuttals=[], raw_output=raw, parsed_ok=False, spoke_at=_now(),
@@ -356,18 +356,18 @@ def _emit_live_bulletin(writer, bulletin: list[BulletinEntry]) -> None:
 # =============================================================================
 
 def make_r1_node(role: CriticRole, llm):
-    def _node(state: DebateSubState) -> dict:
-        turn = _speak_r1(role, state, llm)
+    async def _node(state: DebateSubState) -> dict:
+        turn = await _speak_r1(role, state, llm)
         _emit_live_turn(safe_stream_writer(), role, 1, turn)   # bắn LIVE ngay khi lượt xong
         return {"round1": {role: turn}}
     return _node
 
 
 def make_r2_node(role: CriticRole, llm):
-    def _node(state: DebateSubState) -> dict:
+    async def _node(state: DebateSubState) -> dict:
         own = state.get("round1", {}).get(role)
         own_thesis = own.thesis if own else ""
-        turn = _speak_r2(role, own_thesis, state.get("bulletin", []), llm)
+        turn = await _speak_r2(role, own_thesis, state.get("bulletin", []), llm)
         _emit_live_turn(safe_stream_writer(), role, 2, turn)
         return {"round2": {role: turn}}
     return _node
@@ -466,10 +466,13 @@ def _chunks_from_context(context) -> list[SourceChunk]:
     return chunks
 
 
-def critics_debate(state, *, subgraph=None) -> dict:
+async def critics_debate(state, *, subgraph=None) -> dict:
     """Node public (Tool 2). Đọc intent + context (Tool 1), chạy subgraph, ghi state['debate'].
 
     subgraph: inject để test; None -> dùng subgraph production (lazy).
+
+    async: 8 lượt critic là phần chiếm Ollama lâu nhất; chạy async thì client ngắt kết nối
+    (F5) sẽ huỷ được các request Ollama đang bay, không để chúng cày tiếp và chẹn lượt chat sau.
     """
     intent = state.get("intent")
     context = state.get("context")
@@ -484,7 +487,7 @@ def critics_debate(state, *, subgraph=None) -> dict:
         "consensus_points": [], "contested_points": [],
     }
     app = subgraph or _prod_subgraph()
-    result = app.invoke(sub_in)
+    result = await app.ainvoke(sub_in)
 
     r1 = result.get("round1", {})
     r2 = result.get("round2", {})

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import json
 import re
@@ -76,7 +77,10 @@ def _ci_match(value: str) -> dict:
     return {"$regex": f"^{re.escape(value.strip())}$", "$options": "i"}
 
 
-def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
+async def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
+    """Node async: client F5/đóng tab -> CancelledError huỷ được lượt gọi Ollama đang chạy
+    (node sync chạy trong thread thì không ngắt được, request vẫn chiếm hàng đợi Ollama).
+    Phần retrieve vẫn là I/O blocking (pymongo) -> đẩy sang thread để không chẹn event loop."""
     emitter = EventEmitter(state, writer=safe_stream_writer())
     intent = state.get("intent")
     raw_query = intent.raw_query if intent else state.get("human_message", "")
@@ -91,12 +95,14 @@ def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
             filters["tac_gia"] = _ci_match(intent.author)
 
     # Retrieve chunks
-    raw_chunks = rag_service.hybrid_search(query, filters=filters, limit=_DEEP_RETRIEVAL_LIMIT)
+    raw_chunks = await asyncio.to_thread(
+        rag_service.hybrid_search, query, filters=filters, limit=_DEEP_RETRIEVAL_LIMIT)
     # Metadata trong DB có thể BẨN (ten_tac_pham sai nhãn) -> filter exact-match trượt hết.
     # Nếu rỗng mà có filter -> thử lại KHÔNG filter để vector+keyword tự tìm theo nội dung.
     if not raw_chunks and filters:
         logger.info("prepare_context: 0 chunk với filter %s -> thử lại KHÔNG filter.", filters)
-        raw_chunks = rag_service.hybrid_search(query, filters=None, limit=_DEEP_RETRIEVAL_LIMIT)
+        raw_chunks = await asyncio.to_thread(
+            rag_service.hybrid_search, query, filters=None, limit=_DEEP_RETRIEVAL_LIMIT)
     chunks = [SourceChunk.model_validate(c) for c in raw_chunks]
 
     works = sorted({c.metadata.get("ten_tac_pham") for c in chunks if c.metadata.get("ten_tac_pham")})
@@ -145,7 +151,7 @@ def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
     emitter.status("prepare_context", "Đang phân tích & tóm tắt ngữ cảnh…")
     response_text = ""
     try:
-        response = llm.invoke(messages)
+        response = await llm.ainvoke(messages)
         response_text = str(response.content) if not isinstance(response.content, str) else response.content
     except Exception as e:
         logger.error("Ollama call failed in prepare_context: %s", e)

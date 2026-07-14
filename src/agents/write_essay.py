@@ -86,8 +86,12 @@ def _stream_prose(emitter: EventEmitter, node: str, text: str) -> None:
         emitter.token(node, word + " ")
 
 
-def write_essay(state: AgentState) -> dict:
-    """Node public (Tool 3). Đọc debate + context, gọi LLM sinh bài luận."""
+async def write_essay(state: AgentState) -> dict:
+    """Node public (Tool 3). Đọc debate + context, gọi LLM sinh bài luận.
+
+    async: sinh bài luận là lượt gọi Ollama dài nhất -> phải huỷ được khi client ngắt (F5),
+    nếu không nó vẫn sinh nốt và chiếm hàng đợi Ollama của lượt chat kế tiếp.
+    """
     emitter = EventEmitter(state, writer=safe_stream_writer())
     query = state.get("human_message", "")
     context = state.get("context")
@@ -120,7 +124,7 @@ def write_essay(state: AgentState) -> dict:
     emitter.status("write_essay", "Đang viết bài luận…")
     try:
         # Gọi mô hình để lấy structured output
-        out: EssayLLMOutput = structured_llm.invoke(msgs)
+        out: EssayLLMOutput = await structured_llm.ainvoke(msgs)
         
         # Chuyển đổi EssayLLMOutput -> EssayDraft (bỏ thinking)
         sections = []

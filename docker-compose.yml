@@ -43,6 +43,10 @@ services:
     restart: unless-stopped
     ports:
       - "11434:11434"
+    # Mặc định Ollama chỉ chạy 1 request/lượt -> 4 critic (Tool 2) fan-out song song phải
+    # xếp hàng nối đuôi, và 1 lượt chat deep độc chiếm Ollama khiến mọi request khác treo.
+    environment:
+      OLLAMA_NUM_PARALLEL: "4"
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
