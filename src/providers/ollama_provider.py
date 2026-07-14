@@ -7,6 +7,9 @@ logger = logging.getLogger("rag-service.ollama")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "bge-m3")
+# Timeout (giây) cho MỖI request tới Ollama. Không set -> httpx chờ vô hạn: nếu Ollama
+# treo (đang load model / hết VRAM), node kẹt mãi, stream im lặng và FE quay vòng vô tận.
+OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "180"))
 # Model fine-tune (GGUF) được host trên HuggingFace. Đồng đội chạy 1 lần:
 #   ollama run hf.co/Tobi2904/qwen-finetuned-gguf
 # rồi đặt FINE_TUNED_OLLAMA_LLM_MODEL=hf.co/Tobi2904/qwen-finetuned-gguf:latest trong .env.
@@ -30,7 +33,8 @@ class OllamaProvider:
             self._llms[key] = ChatOllama(
                 base_url=OLLAMA_URL,
                 model=model,
-                temperature=temperature
+                temperature=temperature,
+                client_kwargs={"timeout": OLLAMA_TIMEOUT}
             )
         return self._llms[key]
 
@@ -39,7 +43,8 @@ class OllamaProvider:
             logger.info(f"Initializing OllamaEmbeddings with model: {OLLAMA_EMBED_MODEL} on URL: {OLLAMA_URL}")
             self._embeddings = OllamaEmbeddings(
                 base_url=OLLAMA_URL,
-                model=OLLAMA_EMBED_MODEL
+                model=OLLAMA_EMBED_MODEL,
+                client_kwargs={"timeout": OLLAMA_TIMEOUT}
             )
         return self._embeddings
 

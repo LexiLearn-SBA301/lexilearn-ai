@@ -5,6 +5,7 @@ Mục đích: Cung cấp API cho FE truy vấn hệ thống RAG và tùy chọn 
 để phục vụ A/B Testing và luồng multi-agent workflow.
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -82,6 +83,11 @@ async def chat_stream(req: ChatRequest, wf: WorkflowService = Depends(get_workfl
         try:
             async for ev in wf.astream(req.message, thread_id, filters=req.filters):
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            # FE bấm Dừng / đóng popup -> abort fetch. Starlette cancel task này, LangGraph
+            # hủy node đang chạy, request tới Ollama bị hủy theo. Re-raise để cancel lan tiếp.
+            logger.info("Stream bị hủy bởi client thread=%s", thread_id)
+            raise
         except Exception as e:  # lỗi giữa chừng -> báo 1 event ERROR rồi đóng stream
             logger.exception("Stream workflow failed thread=%s", thread_id)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
