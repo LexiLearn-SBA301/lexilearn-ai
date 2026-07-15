@@ -135,6 +135,7 @@ class IntentAnalysis(BaseModel):
     raw_query: str
     route: Route
     confidence: float = 0.0
+    need_retrieval: bool = True               # False khi chào hỏi/tán gẫu hoặc user đã dán sẵn văn bản -> khỏi tra cứu DB
     work_title: Optional[str] = None         # tác phẩm
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)

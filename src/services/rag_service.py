@@ -206,9 +206,12 @@ class RAGService:
 
         return ordered_docs
 
-    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5, model_name: Optional[str] = None) -> Dict[str, Any]:
+    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5, model_name: Optional[str] = None, retrieve: bool = True) -> Dict[str, Any]:
         """
         Answer a RAG query by retrieving contexts and calling Ollama LLM to synthesize the final answer.
+
+        retrieve=False: bỏ qua tra cứu (chào hỏi/tán gẫu) -> trả lời trực tiếp bằng
+        CHITCHAT_PROMPT, sources rỗng.
         """
         # Guard against prompt injection
         guard_res = self.guard.check_query(query)
@@ -218,27 +221,32 @@ class RAGService:
                 "sources": []
             }
 
-        # Retrieve context documents
-        chunks = self.hybrid_search(query, filters=filters, limit=limit)
-
-        if not chunks:
-            context = "Không tìm thấy tài liệu phù hợp trong cơ sở dữ liệu."
+        if not retrieve:
+            from config.prompt_template import CHITCHAT_PROMPT
+            system_prompt = CHITCHAT_PROMPT
+            user_prompt = query
+            chunks = []
         else:
-            context_parts = []
-            for idx, chunk in enumerate(chunks):
-                metadata = chunk.get("metadata", {})
-                title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
-                author = metadata.get("tac_gia", "Không rõ tác giả")
-                page = chunk.get("position", {}).get("page", "?")
-                content = chunk.get("content", "")
-                
-                part = f"Tài liệu {idx + 1} (Tác phẩm: '{title}' - Tác giả: {author}, Trang: {page}):\n{content}"
-                context_parts.append(part)
-            context = "\n\n".join(context_parts)
+            # Retrieve context documents
+            chunks = self.hybrid_search(query, filters=filters, limit=limit)
 
-        system_prompt = SYSTEM_PROMPT
+            if not chunks:
+                context = "Không tìm thấy tài liệu phù hợp trong cơ sở dữ liệu."
+            else:
+                context_parts = []
+                for idx, chunk in enumerate(chunks):
+                    metadata = chunk.get("metadata", {})
+                    title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
+                    author = metadata.get("tac_gia", "Không rõ tác giả")
+                    page = chunk.get("position", {}).get("page", "?")
+                    content = chunk.get("content", "")
 
-        user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
+                    part = f"Tài liệu {idx + 1} (Tác phẩm: '{title}' - Tác giả: {author}, Trang: {page}):\n{content}"
+                    context_parts.append(part)
+                context = "\n\n".join(context_parts)
+
+            system_prompt = SYSTEM_PROMPT
+            user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
 
         try:
             if model_name:

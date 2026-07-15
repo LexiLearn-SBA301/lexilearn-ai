@@ -13,26 +13,18 @@ logger = logging.getLogger("rag-service.agents.write_essay")
 
 
 def _render_debate_data(debate_state: Any) -> str:
-    """Format kết quả debate thành chuỗi dễ đọc cho prompt."""
+    """Format kết quả debate thành chuỗi dễ đọc cho prompt.
+
+    KHÔNG in consensus_points/contested_points: collect_node dựng 2 list đó TỪ CHÍNH `reason`
+    của các rebuttal, nên in chúng rồi in tiếp "CHI TIẾT PHẢN BIỆN CHÉO" là lặp nguyên văn
+    cùng một nội dung 2 lần -> prompt phồng gấp đôi mà không thêm thông tin nào cho Qwen-3B.
+    """
     if not debate_state:
         return "(Không có dữ liệu tranh luận)"
-    
-    parts = []
-    
-    # 1. Điểm đồng thuận & tranh cãi
-    if debate_state.consensus_points:
-        parts.append("### ĐIỂM ĐỒNG THUẬN (CONSENSUS):")
-        for p in debate_state.consensus_points:
-            parts.append(f"- {p}")
-        parts.append("")
-        
-    if debate_state.contested_points:
-        parts.append("### ĐIỂM TRANH CÃI (CONTESTED):")
-        for p in debate_state.contested_points:
-            parts.append(f"- {p}")
-        parts.append("")
 
-    # 2. Vòng 1: Luận đề & Luận điểm
+    parts = []
+
+    # Vòng 1: Luận đề & Luận điểm
     parts.append("### CHI TIẾT LUẬN ĐIỂM TỪ CÁC GÓC NHÌN:")
     for role, turn in debate_state.round1.items():
         role_name = CRITIC_DISPLAY.get(role, role.value)
@@ -42,7 +34,7 @@ def _render_debate_data(debate_state: Any) -> str:
             parts.append(f"  + {arg.point}: {arg.support}")
         parts.append("")
         
-    # 3. Vòng 2: Phản biện
+    # Vòng 2: Phản biện
     parts.append("### CHI TIẾT PHẢN BIỆN CHÉO:")
     has_rebuttals = False
     for role, turn in debate_state.round2.items():
@@ -61,18 +53,17 @@ def _render_debate_data(debate_state: Any) -> str:
     return "\n".join(parts)
 
 
-def _render_context_summary(context: Any) -> str:
-    """Trích xuất summary và entities từ context."""
-    if not context:
-        return ""
-    
-    parts = [f"Tóm tắt: {context.summary}"]
-    if context.entities:
-        parts.append("Các thực thể nổi bật:")
-        for ent in context.entities:
-            parts.append(f"- {ent.name} ({ent.type}): {ent.description}")
-    
-    return "\n".join(parts)
+def _render_nguyen_lieu(context: Any) -> str:
+    """Văn bản gốc, đánh số (1) (2) (3) — ĐÚNG format [Ngữ liệu] model được fine-tune (s4.jsonl).
+
+    Trước đây node này chỉ truyền summary + entities, chunks KHÔNG BAO GIỜ tới tay model.
+    Mà fine-tune dạy nó "mọi dẫn chứng phải trích nguyên văn từ ngữ liệu" -> không có câu chữ
+    nào để trích, nó buộc phải bịa dẫn chứng (citation_check fail).
+    """
+    chunks = getattr(context, "chunks", None) if context else None
+    if not chunks:
+        return "(không có ngữ liệu)"
+    return "\n\n".join(f"({i}) {(c.text or '').strip()}" for i, c in enumerate(chunks, 1))
 
 
 def _stream_prose(emitter: EventEmitter, node: str, text: str) -> None:
@@ -98,16 +89,16 @@ async def write_essay(state: AgentState) -> dict:
     debate = state.get("debate")
     
     # Ráp template
-    context_str = _render_context_summary(context)
+    nguyen_lieu = _render_nguyen_lieu(context)
     debate_str = _render_debate_data(debate)
-    
+
     # Nếu có feedback từ judge (với Tool 3, có thể tương lai thêm judge, cấu trúc sẵn)
     fb = (state.get("last_feedback") or {}).get(Stage.WRITE_ESSAY.value, "")
     fb_block = f"\n\n--- GÓP Ý TỪ GIÁM KHẢO CHO LƯỢT TRƯỚC ---\n{fb}\nHãy sửa lại bài viết theo góp ý trên, giữ nguyên những điểm đã tốt." if fb else ""
 
     user_prompt = ESSAY_USER_PROMPT_TEMPLATE.format(
+        nguyen_lieu=nguyen_lieu,
         query=query,
-        context_summary=context_str,
         debate_data=debate_str,
         feedback_block=fb_block
     )

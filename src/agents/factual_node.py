@@ -14,14 +14,17 @@ def factual_node(state: AgentState, rag_service: Optional[RAGService] = None) ->
     """Node xử lý câu hỏi Factual (Mode A), gọi RAGService để trả lời."""
     emitter = EventEmitter(state, writer=safe_stream_writer())
     query = state.get("human_message", "")
+    # Supervisor quyết định có tra cứu không (chào hỏi/tán gẫu -> khỏi retrieve).
+    need_retrieval = getattr(state.get("intent"), "need_retrieval", True)
 
     if rag_service:
-        logger.info(f"Factual node querying RAGService for: {query}")
-        emitter.status("factual", "Đang tra cứu tài liệu…")
+        logger.info(f"Factual node querying RAGService for: {query} (retrieve={need_retrieval})")
+        if need_retrieval:
+            emitter.status("factual", "Đang tra cứu tài liệu…")
 
         filters = state.get("filters", {})
         # Dùng model fine-tune như yêu cầu của user
-        result = rag_service.query(query=query, filters=filters, model_name=FINE_TUNED_OLLAMA_LLM_MODEL)
+        result = rag_service.query(query=query, filters=filters, model_name=FINE_TUNED_OLLAMA_LLM_MODEL, retrieve=need_retrieval)
 
         answer = result.get("answer", "Không có câu trả lời.")
         raw_sources = result.get("sources", [])
@@ -35,12 +38,13 @@ def factual_node(state: AgentState, rag_service: Optional[RAGService] = None) ->
                 logger.warning(f"Lỗi parse SourceChunk trong factual_node: {e}")
 
         model_name = FINE_TUNED_OLLAMA_LLM_MODEL
-        works = sorted({c.metadata.get("ten_tac_pham") for c in chunks_used if c.metadata.get("ten_tac_pham")})
-        emitter.retrieval(
-            "factual",
-            f"Đã tra cứu {len(chunks_used)} đoạn trích" + (f" từ: {', '.join(works)}" if works else "."),
-            payload={"count": len(chunks_used), "works": works},
-        )
+        if need_retrieval:
+            works = sorted({c.metadata.get("ten_tac_pham") for c in chunks_used if c.metadata.get("ten_tac_pham")})
+            emitter.retrieval(
+                "factual",
+                f"Đã tra cứu {len(chunks_used)} đoạn trích" + (f" từ: {', '.join(works)}" if works else "."),
+                payload={"count": len(chunks_used), "works": works},
+            )
     else:
         logger.error("RAGService is None trong factual_node")
         answer = f"[LỖI] Không có RAGService để trả lời cho: {query}"

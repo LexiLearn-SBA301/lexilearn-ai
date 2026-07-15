@@ -20,7 +20,7 @@ def test_route_from_state():
 class MockRAGService:
     def hybrid_search(self, query, filters=None, limit=5, k=60):
         return [{"chunk_id": "c1", "text": "Mock content", "metadata": {"ten_tac_pham": "mock"}}]
-    def query(self, query, filters=None, limit=5, model_name=None):
+    def query(self, query, filters=None, limit=5, model_name=None, retrieve=True):
         return {"answer": "Mock factual answer", "sources": []}
 
 

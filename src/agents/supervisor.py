@@ -40,7 +40,16 @@ Nhiệm vụ: đọc câu hỏi của học sinh và phân loại thành 1 trong
   Ví dụ: "Phân tích tâm lý nhân vật Tràng", "Cảm nhận bi kịch của Chí Phèo",
   "So sánh hình tượng người phụ nữ trong hai tác phẩm".
 
-Trả về JSON đúng schema: route, confidence (0..1), work_title, author,
+Ngoài route, quyết định need_retrieval (có cần tra cứu kho tài liệu không):
+- need_retrieval=false khi:
+  (a) Lời chào/tán gẫu/câu hỏi meta không liên quan văn học ("xin chào", "bạn là ai",
+      "cảm ơn"): không có gì để tra cứu.
+  (b) Người dùng đã DÁN SẴN đoạn thơ/văn bản ngay trong câu hỏi và chỉ muốn phân tích
+      chính đoạn đó: tra cứu thêm chỉ gây nhiễu.
+- need_retrieval=true khi câu hỏi nói VỀ một tác phẩm nhưng KHÔNG kèm sẵn văn bản
+  -> cần lấy dẫn chứng từ kho tài liệu.
+
+Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, work_title, author,
 detected_entities, requested_dimensions, reasoning (giải thích ngắn vì sao chọn route).
 """
 
@@ -49,6 +58,7 @@ class _Decision(BaseModel):
     """Phần Gemini sinh ra; raw_query & analyzed_at do server gắn vào sau."""
     route: Route
     confidence: float = 0.0
+    need_retrieval: bool = True
     work_title: Optional[str] = None
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)
@@ -95,6 +105,7 @@ def supervisor(state: AgentState) -> dict:
         raw_query=query,
         route=d.route,
         confidence=d.confidence,
+        need_retrieval=d.need_retrieval,
         work_title=d.work_title,
         author=d.author,
         detected_entities=d.detected_entities,
