@@ -100,7 +100,7 @@ def _classify(query: str) -> _Decision:
     except Exception as e:
         logger.warning("Supervisor gọi Gemini lỗi (%s) -> fallback route=factual.", e)
         return _Decision(route=Route.FACTUAL,
-                         reasoning=f"[fallback] lỗi gọi Gemini: {e}")
+                         reasoning="Hệ thống đang bận, tạm xử lý câu hỏi theo hướng mặc định.")
 
 
 def supervisor(state: AgentState) -> dict:

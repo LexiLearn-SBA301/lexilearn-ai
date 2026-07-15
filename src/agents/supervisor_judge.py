@@ -213,7 +213,7 @@ def _judge(stage: Stage, content: str, *, client=None) -> JudgeOut:
         raise ValueError("Gemini trả về rỗng")
     except Exception as e:
         logger.warning("Judge %s gọi Gemini lỗi (%s) -> fallback verdict=pass.", stage.value, e)
-        return JudgeOut(verdict="pass", reasoning=f"[fallback] lỗi gọi Gemini: {e}")
+        return JudgeOut(verdict="pass", reasoning="Hệ thống giám khảo đang bận, tạm bỏ qua bước duyệt lần này.")
 
 
 # =============================================================================
