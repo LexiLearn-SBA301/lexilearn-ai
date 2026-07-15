@@ -91,6 +91,14 @@ def _render_context(state: AgentState) -> str:
     asked_author = getattr(intent, "author", None) if intent else None
     question = (getattr(intent, "raw_query", None) if intent else None) or state.get("human_message", "")
 
+    # Tư liệu do NGƯỜI DÙNG dán trực tiếp (need_retrieval=false) -> judge phải chấm khác:
+    # không trừ coverage vì đoạn ngắn, không so accuracy với toàn bộ tác phẩm theo kiến thức ngoài.
+    user_provided = intent is not None and not getattr(intent, "need_retrieval", True)
+    source_line = (
+        "NGƯỜI DÙNG dán trực tiếp trong câu hỏi (KHÔNG lấy từ kho tài liệu)"
+        if user_provided else "truy hồi từ kho tài liệu"
+    )
+
     works: dict[str, int] = {}
     for c in ctx.chunks:
         name = c.metadata.get("ten_tac_pham") or "(không rõ)"
@@ -101,6 +109,7 @@ def _render_context(state: AgentState) -> str:
         f"CÂU HỎI CỦA NGƯỜI DÙNG: {question}\n"
         f"Tác phẩm được hỏi: {asked_work or '(không nêu đích danh)'}\n"
         f"Tác giả được hỏi: {asked_author or '(không nêu)'}\n\n"
+        f"NGUỒN TƯ LIỆU: {source_line}\n"
         f"Tác phẩm THẬT của các đoạn trích lấy được: {works_line}\n"
         f"Số đoạn trích (chunks): {len(ctx.chunks)}\n\n"
         f"Tóm tắt:\n{ctx.summary or '(trống)'}\n\n"

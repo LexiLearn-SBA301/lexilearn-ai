@@ -5,8 +5,27 @@ from unittest.mock import patch, AsyncMock, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agents.prepare_context import _build_retrieval_query, _ci_match, prepare_context, _parse_llm_response
-from state.state_schema import Stage, IntentAnalysis, Route, CriticRole
+from agents.prepare_context import (
+    _build_retrieval_query, _ci_match, _dedupe_chunks, prepare_context, _parse_llm_response,
+)
+from state.state_schema import Stage, IntentAnalysis, Route, CriticRole, SourceChunk
+
+
+def test_dedupe_chunks_bo_doan_chong_lan():
+    """Chunk chồng lấn (cửa sổ trượt lúc ingest) -> cùng 1 khúc văn lặp nhiều lần trong prompt.
+
+    Ca thật (Đăm Săn): 10 chunk lấy về thì 6 chunk là cùng khúc 'chày mòn... chuồng lợn...'
+    -> prompt Tool 2/3 phồng gấp đôi, Qwen-3B đọc lại 6 lần cùng một đoạn.
+    """
+    full = "Đăm Săn bừng tỉnh, chớp ngay một cái chày mòn, ném trúng vành tai kẻ địch. Mtao Mxây tháo chạy."
+    chunks = [
+        SourceChunk(chunk_id="c1", text="Đăm Săn bừng tỉnh, chớp ngay một cái chày mòn"),  # con của c2
+        SourceChunk(chunk_id="c2", text=full),
+        SourceChunk(chunk_id="c3", text="Nhà Mtao Mxây đầu sàn hiên đẽo hình mặt trăng."),  # đoạn khác
+        SourceChunk(chunk_id="c4", text="Mtao Mxây tháo chạy."),                            # con của c2
+    ]
+    out = _dedupe_chunks(chunks)
+    assert [c.chunk_id for c in out] == ["c2", "c3"]   # giữ bản dài + đoạn khác, đúng thứ tự retrieval
 
 class MockRAGService:
     def __init__(self, chunks=None):

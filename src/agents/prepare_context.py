@@ -69,6 +69,30 @@ def _build_retrieval_query(intent) -> str:
     return " ".join(out)
 
 
+def _dedupe_chunks(chunks: list) -> list:
+    """Bỏ chunk trùng/nằm gọn trong chunk khác (rác do cửa sổ trượt lúc ingest chồng lấn).
+
+    Ca thật (Đăm Săn): 10 chunk lấy về thì 6 chunk là CÙNG một khúc "chày mòn... chuồng lợn...
+    chuồng trâu..." lặp lại -> prompt Tool 2/3 phồng gấp đôi và Qwen-3B phải đọc lại 6 lần
+    cùng một đoạn. Giữ chunk DÀI trước, rồi bỏ chunk nào là chuỗi con của chunk đã giữ.
+    """
+    kept: list = []
+    for c in sorted(chunks, key=lambda c: len(c.text or ""), reverse=True):
+        text = " ".join((c.text or "").split())     # chuẩn hoá khoảng trắng để so chuỗi con
+        if not text:
+            continue
+        if any(text in " ".join((k.text or "").split()) for k in kept):
+            continue
+        kept.append(c)
+    # trả về đúng thứ tự retrieval ban đầu (điểm liên quan giảm dần), không phải thứ tự độ dài
+    order = {id(c): i for i, c in enumerate(chunks)}
+    kept.sort(key=lambda c: order[id(c)])
+    if len(kept) < len(chunks):
+        logger.info("prepare_context: dedupe chunk %d -> %d (bỏ đoạn trùng/lồng nhau).",
+                    len(chunks), len(kept))
+    return kept
+
+
 def _ci_match(value: str) -> dict:
     """Khớp metadata KHÔNG phân biệt hoa/thường: DB lưu tên tác phẩm CHỮ HOA (vd
     'VIỆT BẮC') còn supervisor tách title-case ('Việt Bắc') -> exact match trượt.
@@ -84,33 +108,49 @@ async def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
     emitter = EventEmitter(state, writer=safe_stream_writer())
     intent = state.get("intent")
     raw_query = intent.raw_query if intent else state.get("human_message", "")
-    # Ưu tiên keyword đã tách (work_title + author + entities); rỗng -> fallback câu hỏi gốc.
-    query = _build_retrieval_query(intent) or raw_query
+    # Supervisor quyết định có tra cứu không. False = user đã dán sẵn đoạn thơ/văn
+    # ngay trong câu hỏi -> phân tích trực tiếp, tra cứu thêm chỉ gây nhiễu ngữ cảnh.
+    need_retrieval = getattr(intent, "need_retrieval", True)
 
-    filters = state.get("filters", {}) or {}
-    if intent:
-        if intent.work_title:
-            filters["ten_tac_pham"] = _ci_match(intent.work_title)   # khớp bất kể hoa/thường
-        if intent.author:
-            filters["tac_gia"] = _ci_match(intent.author)
+    if not need_retrieval:
+        # Dùng thẳng văn bản người dùng cung cấp làm ngữ cảnh (1 chunk). Gắn nhãn
+        # tác phẩm/tác giả từ intent để judge relevance khớp câu hỏi, không REJECT.
+        query = raw_query
+        meta: dict = {}
+        if intent and getattr(intent, "work_title", None):
+            meta["ten_tac_pham"] = intent.work_title
+        if intent and getattr(intent, "author", None):
+            meta["tac_gia"] = intent.author
+        chunks = [SourceChunk(chunk_id="user-input", text=raw_query, metadata=meta)]
+        emitter.status("prepare_context", "Phân tích trực tiếp văn bản bạn cung cấp (không tra cứu thư viện).")
+    else:
+        # Ưu tiên keyword đã tách (work_title + author + entities); rỗng -> fallback câu hỏi gốc.
+        query = _build_retrieval_query(intent) or raw_query
 
-    # Retrieve chunks
-    raw_chunks = await asyncio.to_thread(
-        rag_service.hybrid_search, query, filters=filters, limit=_DEEP_RETRIEVAL_LIMIT)
-    # Metadata trong DB có thể BẨN (ten_tac_pham sai nhãn) -> filter exact-match trượt hết.
-    # Nếu rỗng mà có filter -> thử lại KHÔNG filter để vector+keyword tự tìm theo nội dung.
-    if not raw_chunks and filters:
-        logger.info("prepare_context: 0 chunk với filter %s -> thử lại KHÔNG filter.", filters)
+        filters = state.get("filters", {}) or {}
+        if intent:
+            if intent.work_title:
+                filters["ten_tac_pham"] = _ci_match(intent.work_title)   # khớp bất kể hoa/thường
+            if intent.author:
+                filters["tac_gia"] = _ci_match(intent.author)
+
+        # Retrieve chunks
         raw_chunks = await asyncio.to_thread(
-            rag_service.hybrid_search, query, filters=None, limit=_DEEP_RETRIEVAL_LIMIT)
-    chunks = [SourceChunk.model_validate(c) for c in raw_chunks]
+            rag_service.hybrid_search, query, filters=filters, limit=_DEEP_RETRIEVAL_LIMIT)
+        # Metadata trong DB có thể BẨN (ten_tac_pham sai nhãn) -> filter exact-match trượt hết.
+        # Nếu rỗng mà có filter -> thử lại KHÔNG filter để vector+keyword tự tìm theo nội dung.
+        if not raw_chunks and filters:
+            logger.info("prepare_context: 0 chunk với filter %s -> thử lại KHÔNG filter.", filters)
+            raw_chunks = await asyncio.to_thread(
+                rag_service.hybrid_search, query, filters=None, limit=_DEEP_RETRIEVAL_LIMIT)
+        chunks = _dedupe_chunks([SourceChunk.model_validate(c) for c in raw_chunks])
 
-    works = sorted({c.metadata.get("ten_tac_pham") for c in chunks if c.metadata.get("ten_tac_pham")})
-    emitter.retrieval(
-        "prepare_context",
-        f"Đã truy hồi {len(chunks)} đoạn trích" + (f" từ: {', '.join(works)}" if works else "."),
-        payload={"count": len(chunks), "works": works},
-    )
+        works = sorted({c.metadata.get("ten_tac_pham") for c in chunks if c.metadata.get("ten_tac_pham")})
+        emitter.retrieval(
+            "prepare_context",
+            f"Đã truy hồi {len(chunks)} đoạn trích" + (f" từ: {', '.join(works)}" if works else "."),
+            payload={"count": len(chunks), "works": works},
+        )
 
     if not chunks:
         # No context found

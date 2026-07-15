@@ -34,6 +34,13 @@ class OllamaProvider:
                 base_url=OLLAMA_URL,
                 model=model,
                 temperature=temperature,
+                # Default runtime của Ollama chỉ cấp num_ctx=4096. Lượt write_essay đã ~3.8K token
+                # (input 3.3K + output) -> sát trần; khi retry kèm feedback / ngữ liệu dài hơn sẽ
+                # tràn và Ollama cắt IM LẶNG phần đầu prompt (system + ngữ liệu) -> model bịa dẫn
+                # chứng. Nới 8192 cho dư địa. num_predict=-1: bỏ trần độ dài output, để num_ctx là
+                # ràng buộc duy nhất (phục vụ bài phân tích dài hơn).
+                num_ctx=8192,
+                num_predict=-1,
                 client_kwargs={"timeout": OLLAMA_TIMEOUT}
             )
         return self._llms[key]
