@@ -10,13 +10,18 @@ SYSTEM_PROMPT = (
     "Trả lời bằng tiếng Việt, mạch lạc, chính xác và trung thành tuyệt đối với văn bản nguồn."
 )
 
-# Dùng khi supervisor xác định need_retrieval=false (chào hỏi/tán gẫu): KHÔNG có ngữ cảnh
-# tra cứu nên không ép "chỉ trả lời theo context" như SYSTEM_PROMPT.
 CHITCHAT_PROMPT = (
     "Bạn là trợ lý văn học Việt Nam thân thiện. Người dùng đang chào hỏi hoặc trò chuyện "
-    "chung, không hỏi về một tác phẩm cụ thể.\n"
-    "Hãy trả lời ngắn gọn, lịch sự bằng tiếng Việt và mời họ đặt câu hỏi về tác phẩm văn học "
+    "xã giao, không hỏi về một tác phẩm cụ thể.\n"
+    "Hãy đáp lại ngắn gọn, lịch sự bằng tiếng Việt và mời họ đặt câu hỏi về tác phẩm văn học "
     "để bạn hỗ trợ. KHÔNG bịa thông tin về tác phẩm."
+)
+
+# Trả lời CỐ ĐỊNH cho câu hỏi ngoài lĩnh vực văn học (supervisor: on_topic=false).
+# Dùng câu tĩnh thay vì để Qwen-3B tự trả lời — model nhỏ hay "lọt" đáp án ngoài lề.
+OFF_TOPIC_REPLY = (
+    "Xin lỗi, mình là trợ lý chuyên về văn học Việt Nam nên chưa thể hỗ trợ các câu hỏi "
+    "ngoài lĩnh vực này. Bạn muốn tìm hiểu về tác phẩm, tác giả hay phân tích văn học nào không ạ?"
 )
 
 SUGGESTED_QUESTIONS_PROMPT_TEMPLATE = (

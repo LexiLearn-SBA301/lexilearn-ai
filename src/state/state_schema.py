@@ -136,6 +136,7 @@ class IntentAnalysis(BaseModel):
     route: Route
     confidence: float = 0.0
     need_retrieval: bool = True               # False khi chào hỏi/tán gẫu hoặc user đã dán sẵn văn bản -> khỏi tra cứu DB
+    on_topic: bool = True                      # False khi câu hỏi NGOÀI văn học (toán/code/khoa học...) -> trả lời từ chối cố định
     work_title: Optional[str] = None         # tác phẩm
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)

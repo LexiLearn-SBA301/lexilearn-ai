@@ -49,8 +49,13 @@ Ngoài route, quyết định need_retrieval (có cần tra cứu kho tài liệ
 - need_retrieval=true khi câu hỏi nói VỀ một tác phẩm nhưng KHÔNG kèm sẵn văn bản
   -> cần lấy dẫn chứng từ kho tài liệu.
 
-Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, work_title, author,
-detected_entities, requested_dimensions, reasoning (giải thích ngắn vì sao chọn route).
+Và quyết định on_topic (câu hỏi có thuộc phạm vi hỗ trợ không):
+- on_topic=false khi câu hỏi NGOÀI văn học Việt Nam: lập trình/code, toán, hình học,
+  khoa học, thời tiết, đời sống chung... (vd "java là ngôn ngữ lập trình đúng không").
+- on_topic=true khi là lời chào/xã giao HOẶC hỏi–đáp/phân tích về văn học.
+
+Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, on_topic, work_title,
+author, detected_entities, requested_dimensions, reasoning (giải thích ngắn vì sao chọn route).
 """
 
 
@@ -59,6 +64,7 @@ class _Decision(BaseModel):
     route: Route
     confidence: float = 0.0
     need_retrieval: bool = True
+    on_topic: bool = True
     work_title: Optional[str] = None
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)
@@ -101,11 +107,15 @@ def supervisor(state: AgentState) -> dict:
     """Node supervisor: phân tích intent + chọn route. Trả về state delta."""
     query = state.get("human_message", "")
     d = _classify(query)
+    # Câu ngoài văn học -> luôn về factual để trả lời từ chối cố định (factual_node),
+    # kể cả khi Gemini lỡ định tuyến sang deep_analysis.
+    route = Route.FACTUAL if not d.on_topic else d.route
     intent = IntentAnalysis(
         raw_query=query,
-        route=d.route,
+        route=route,
         confidence=d.confidence,
         need_retrieval=d.need_retrieval,
+        on_topic=d.on_topic,
         work_title=d.work_title,
         author=d.author,
         detected_entities=d.detected_entities,
@@ -113,24 +123,24 @@ def supervisor(state: AgentState) -> dict:
         reasoning=d.reasoning,
         analyzed_at=datetime.now(timezone.utc),
     )
-    logger.info("Supervisor route=%s conf=%.2f", d.route, d.confidence)
+    logger.info("Supervisor route=%s conf=%.2f on_topic=%s", route, d.confidence, d.on_topic)
 
     emitter = EventEmitter(state, writer=safe_stream_writer())
     emitter.intent(
         "supervisor:intent",
-        intent.reasoning or f"Phân loại câu hỏi: {d.route.value}",
+        intent.reasoning or f"Phân loại câu hỏi: {route.value}",
         payload={
             "work_title": intent.work_title,
             "author": intent.author,
-            "route": d.route.value,
+            "route": route.value,
             "confidence": d.confidence,
             "detected_entities": intent.detected_entities,
         },
     )
-    emitter.route("supervisor:intent", d.route.value)
+    emitter.route("supervisor:intent", route.value)
     return {
         "intent": intent,
-        "route": d.route,
+        "route": route,
         "current_stage": Stage.INTENT,
         "current_node": "supervisor:intent",
         "status": "running",

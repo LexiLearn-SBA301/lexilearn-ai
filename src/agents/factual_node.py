@@ -6,6 +6,7 @@ from state.agent_state import AgentState
 from state.state_schema import EventEmitter, FactualResult, Stage, SourceChunk, safe_stream_writer
 from services.rag_service import RAGService
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL
+from config.prompt_template import OFF_TOPIC_REPLY
 
 logger = logging.getLogger("rag-service.agents.factual_node")
 
@@ -14,8 +15,20 @@ def factual_node(state: AgentState, rag_service: Optional[RAGService] = None) ->
     """Node xử lý câu hỏi Factual (Mode A), gọi RAGService để trả lời."""
     emitter = EventEmitter(state, writer=safe_stream_writer())
     query = state.get("human_message", "")
+    intent = state.get("intent")
+    # Câu ngoài văn học (toán/code/khoa học...) -> trả lời từ chối CỐ ĐỊNH, không gọi
+    # qwen (3B hay lộ đáp án ngoài lề) và không tra cứu.
+    if not getattr(intent, "on_topic", True):
+        logger.info("Factual node: off-topic -> trả lời cố định, bỏ qua retrieve/LLM.")
+        return {
+            "factual": FactualResult(answer=OFF_TOPIC_REPLY, chunks_used=[], model="static"),
+            "current_stage": Stage.FACTUAL,
+            "current_node": "factual",
+            "events": emitter.milestones,
+            "event_seq": emitter.seq,
+        }
     # Supervisor quyết định có tra cứu không (chào hỏi/tán gẫu -> khỏi retrieve).
-    need_retrieval = getattr(state.get("intent"), "need_retrieval", True)
+    need_retrieval = getattr(intent, "need_retrieval", True)
 
     if rag_service:
         logger.info(f"Factual node querying RAGService for: {query} (retrieve={need_retrieval})")
