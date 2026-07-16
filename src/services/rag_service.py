@@ -12,6 +12,11 @@ from retrievals.rrf import reciprocal_rank_fusion
 from providers.ollama_provider import ollama_provider
 from config.prompt_template import SYSTEM_PROMPT
 from security.injection_guard import InjectionGuard
+from providers.gemini_provider import gemini_provider
+from google.genai import types
+from schemas.suggestion_schema import SuggestedQuestionsOut
+from datetime import datetime, timezone
+import json
 
 logger = logging.getLogger("rag-service.services.rag-service")
 logging.basicConfig(level=logging.INFO)
@@ -152,12 +157,18 @@ class RAGService:
         if filters:
             metadata_keys = {"ten_tac_pham", "tac_gia", "lop", "the_loai", "hoc_ki", "nam_sang_tac", "tags"}
             for key, val in filters.items():
-                if key.startswith("metadata.") or key in ["source_doc_id", "chunk_id", "is_active"]:
-                    db_filter[key] = val
-                elif key in metadata_keys:
-                    db_filter[f"metadata.{key}"] = val
+                # Áp dụng regex không phân biệt chữ hoa/thường cho các giá trị chuỗi
+                if isinstance(val, str):
+                    val_condition = {"$regex": f"^{re.escape(val)}$", "$options": "i"}
                 else:
-                    db_filter[key] = val
+                    val_condition = val
+                    
+                if key.startswith("metadata.") or key in ["source_doc_id", "chunk_id", "is_active"]:
+                    db_filter[key] = val_condition
+                elif key in metadata_keys:
+                    db_filter[f"metadata.{key}"] = val_condition
+                else:
+                    db_filter[key] = val_condition
 
         # 2. Get Query Embedding
         query_vector = self.embedder.embed_query(query)
@@ -195,9 +206,12 @@ class RAGService:
 
         return ordered_docs
 
-    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5, model_name: Optional[str] = None) -> Dict[str, Any]:
+    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5, model_name: Optional[str] = None, retrieve: bool = True) -> Dict[str, Any]:
         """
         Answer a RAG query by retrieving contexts and calling Ollama LLM to synthesize the final answer.
+
+        retrieve=False: bỏ qua tra cứu (chào hỏi/tán gẫu) -> trả lời trực tiếp bằng
+        CHITCHAT_PROMPT, sources rỗng.
         """
         # Guard against prompt injection
         guard_res = self.guard.check_query(query)
@@ -207,27 +221,32 @@ class RAGService:
                 "sources": []
             }
 
-        # Retrieve context documents
-        chunks = self.hybrid_search(query, filters=filters, limit=limit)
-
-        if not chunks:
-            context = "Không tìm thấy tài liệu phù hợp trong cơ sở dữ liệu."
+        if not retrieve:
+            from config.prompt_template import CHITCHAT_PROMPT
+            system_prompt = CHITCHAT_PROMPT
+            user_prompt = query
+            chunks = []
         else:
-            context_parts = []
-            for idx, chunk in enumerate(chunks):
-                metadata = chunk.get("metadata", {})
-                title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
-                author = metadata.get("tac_gia", "Không rõ tác giả")
-                page = chunk.get("position", {}).get("page", "?")
-                content = chunk.get("content", "")
-                
-                part = f"Tài liệu {idx + 1} (Tác phẩm: '{title}' - Tác giả: {author}, Trang: {page}):\n{content}"
-                context_parts.append(part)
-            context = "\n\n".join(context_parts)
+            # Retrieve context documents
+            chunks = self.hybrid_search(query, filters=filters, limit=limit)
 
-        system_prompt = SYSTEM_PROMPT
+            if not chunks:
+                context = "Không tìm thấy tài liệu phù hợp trong cơ sở dữ liệu."
+            else:
+                context_parts = []
+                for idx, chunk in enumerate(chunks):
+                    metadata = chunk.get("metadata", {})
+                    title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
+                    author = metadata.get("tac_gia", "Không rõ tác giả")
+                    page = chunk.get("position", {}).get("page", "?")
+                    content = chunk.get("content", "")
 
-        user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
+                    part = f"Tài liệu {idx + 1} (Tác phẩm: '{title}' - Tác giả: {author}, Trang: {page}):\n{content}"
+                    context_parts.append(part)
+                context = "\n\n".join(context_parts)
+
+            system_prompt = SYSTEM_PROMPT
+            user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
 
         try:
             if model_name:
@@ -259,6 +278,98 @@ class RAGService:
         return {
             "answer": answer,
             "sources": chunks
+        }
+
+    def get_suggested_questions(self, work_title: str) -> dict:
+        """
+        Retrieves 3 suggested questions for a work.
+        Uses lazy-caching: checks db, falls back to Gemini on-the-fly and saves cache.
+        """
+        works_col = self.db["works_metadata"]
+        
+        # 1. Tìm kiếm trong cache DB
+        query_regex = {"$regex": f"^{re.escape(work_title.strip())}$", "$options": "i"}
+        cached = works_col.find_one({"ten_tac_pham": query_regex})
+        
+        if cached:
+            logger.info("Found cached suggestions for work: %s", cached.get("ten_tac_pham"))
+            return {
+                "ten_tac_pham": cached.get("ten_tac_pham", ""),
+                "tac_gia": cached.get("tac_gia", "Không rõ"),
+                "suggested_questions": cached.get("suggested_questions", [])
+            }
+            
+        # 2. Sinh động nếu chưa có cache
+        logger.info("No cached suggestions for '%s'. Falling back to dynamic generation.", work_title)
+        
+        chunks_col = self.db["chunks"]
+        chunks = list(chunks_col.find(
+            {"metadata.ten_tac_pham": query_regex, "is_active": True},
+            {"content": 1, "metadata": 1}
+        ).limit(5))
+        
+        if not chunks:
+            raise ValueError(f"Không tìm thấy tác phẩm '{work_title}' trong cơ sở dữ liệu.")
+            
+        metadata = chunks[0].get("metadata", {})
+        resolved_author = metadata.get("tac_gia", "Không rõ")
+        resolved_title = metadata.get("ten_tac_pham", work_title.upper())
+        grade = metadata.get("lop", 12)
+        semester = metadata.get("hoc_ki", 1)
+        
+        chunk_texts = [c.get("content", "") for c in chunks]
+        sample_text = "\n\n".join(chunk_texts)[:2000]
+        
+        client = gemini_provider.get_client()
+        if not client:
+            raise RuntimeError("Hệ thống chưa được cấu hình GEMINI_API_KEY để sinh câu hỏi.")
+            
+        from config.prompt_template import SUGGESTED_QUESTIONS_PROMPT_TEMPLATE
+        prompt = SUGGESTED_QUESTIONS_PROMPT_TEMPLATE.format(
+            title=resolved_title,
+            author=resolved_author,
+            grade=grade,
+            semester=semester,
+            sample_text=sample_text
+        )
+        
+        gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        
+        resp = client.models.generate_content(
+            model=gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=SuggestedQuestionsOut,
+                temperature=0.7
+            )
+        )
+        
+        data = json.loads(resp.text)
+        questions = data.get("questions", [])
+        if not questions:
+            raise ValueError("Gemini returned empty questions list.")
+            
+        works_col.update_one(
+            {"ten_tac_pham": resolved_title.upper()},
+            {
+                "$set": {
+                    "ten_tac_pham": resolved_title.upper(),
+                    "tac_gia": resolved_author,
+                    "lop": grade,
+                    "hoc_ki": semester,
+                    "suggested_questions": questions,
+                    "updated_at": datetime.now(timezone.utc)
+                }
+            },
+            upsert=True
+        )
+        logger.info("Successfully generated and cached suggested questions for: %s", resolved_title.upper())
+        
+        return {
+            "ten_tac_pham": resolved_title.upper(),
+            "tac_gia": resolved_author,
+            "suggested_questions": questions
         }
 
     def evaluate(self, ground_truth_path: str = "ground_truth.json", limit: int = 5) -> Dict[str, Any]:

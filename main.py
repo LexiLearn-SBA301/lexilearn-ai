@@ -1,4 +1,5 @@
 import sys
+
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 from contextlib import asynccontextmanager
@@ -12,15 +13,25 @@ load_dotenv()
 # Add src folder to sys.path
 sys.path.insert(0, "src")
 from db.mongo_client import connect_to_mongo, close_mongo_connection
+from db.checkpointer import get_checkpointer, close_checkpointer
 from api.chat_router import router as chat_router
+from api.debate_router import router as debate_router
+from api.exception_handlers import register_exception_handlers
+from services.agent_service.workflow_service import WorkflowService
+from services.agent_service.chat_service import OllamaChatService
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Establish MongoDB connection when starting FastAPI server
     connect_to_mongo()
+    # Dựng WorkflowService 1 lần ở startup, kèm Redis checkpointer (persist/resume theo thread_id).
+    checkpointer = await get_checkpointer()
+    app.state.workflow = WorkflowService(checkpointer=checkpointer)
+    app.state.chat_svc = OllamaChatService()
     yield
     # Close connection when stopping
     close_mongo_connection()
+    await close_checkpointer(checkpointer)
 
 app = FastAPI(
     title="RAG Service",
@@ -40,6 +51,10 @@ app.add_middleware(
 
 # Đăng ký các router API (tầng route nằm trong src/api/)
 app.include_router(chat_router)
+app.include_router(debate_router)   # endpoint test Tool 2 (critics_debate) độc lập
+
+# Đăng ký exception handlers tập trung (map domain exception -> HTTP), khác java không có container phải tự đăng ký
+register_exception_handlers(app)
 
 @app.get("/")
 def read_root():
@@ -67,10 +82,11 @@ if __name__ == "__main__":
         help="Kích hoạt dịch vụ nạp dữ liệu IngestService bất đồng bộ."
     )
     parser.add_argument(
-        "--pdf", 
+        "--file", "--pdf",
+        dest="file_path",
         type=str, 
         default="docs", 
-        help="Đường dẫn đến file PDF đơn lẻ hoặc thư mục chứa các file PDF cần nạp (mặc định: 'docs')."
+        help="Đường dẫn đến file PDF/DOCX đơn lẻ hoặc thư mục chứa các file cần nạp (mặc định: 'docs')."
     )
     parser.add_argument(
         "--query",
@@ -104,12 +120,12 @@ if __name__ == "__main__":
         from services.ingest_service import IngestService
         
         print("=" * 80)
-        print(f"KHỞI ĐỘNG TIẾN TRÌNH INGESTION CHO: {args.pdf}")
+        print(f"KHỞI ĐỘNG TIẾN TRÌNH INGESTION CHO: {args.file_path}")
         print("=" * 80)
         
         try:
             service = IngestService()
-            job_id = service.start_ingestion(args.pdf, use_llm_corrector=args.use_llm_corrector)
+            job_id = service.start_ingestion(args.file_path, use_llm_corrector=args.use_llm_corrector)
             print(f"Đã khởi tạo Job nạp dữ liệu bất đồng bộ thành công.")
             print(f"Mã Job ID: {job_id}")
             print("Đang chạy ngầm và theo dõi tiến độ, vui lòng không tắt CMD...")

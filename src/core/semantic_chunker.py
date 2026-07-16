@@ -318,7 +318,11 @@ class SemanticChunker:
         chunks: List[SemanticChunk] = []
         slug_counters: Dict[str, int] = {}
         
+        current_work_title = "Sách Giáo Khoa"
         for section in sections:
+            if section.level == 0:
+                current_work_title = section.title
+                
             if section.level in (0, 1):
                 section_title = section.title
                 subsection_title = None
@@ -352,7 +356,8 @@ class SemanticChunker:
                     token_count=0,
                     char_count=0,
                     has_overlap=False,
-                    overlap_from_chunk=None
+                    overlap_from_chunk=None,
+                    ten_tac_pham=current_work_title
                 )
                 chunks.append(empty_chunk)
                 continue
@@ -404,7 +409,8 @@ class SemanticChunker:
                         token_count=token_count,
                         char_count=char_count,
                         has_overlap=has_overlap,
-                        overlap_from_chunk=overlap_from_chunk
+                        overlap_from_chunk=overlap_from_chunk,
+                        ten_tac_pham=current_work_title
                     )
                     section_chunks.append(new_chunk)
                     chunks.append(new_chunk)
@@ -450,7 +456,8 @@ class SemanticChunker:
                     token_count=token_count,
                     char_count=char_count,
                     has_overlap=has_overlap,
-                    overlap_from_chunk=overlap_from_chunk
+                    overlap_from_chunk=overlap_from_chunk,
+                    ten_tac_pham=current_work_title
                 )
                 chunks.append(new_chunk)
                 

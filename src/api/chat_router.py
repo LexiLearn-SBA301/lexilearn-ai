@@ -1,17 +1,26 @@
 """
-Chat API router — Hỗ trợ cả hai mô hình (Finetuned và Base) kết hợp RAG.
+Chat API router — Hỗ trợ cả hai mô hình (Finetuned và Base) kết hợp RAG và workflow.
 
 Mục đích: Cung cấp API cho FE truy vấn hệ thống RAG và tùy chọn model sinh câu trả lời
-để phục vụ A/B Testing.
+để phục vụ A/B Testing và luồng multi-agent workflow.
 """
+
+import asyncio
+import json
 import logging
-from typing import Any, List, Optional, Dict
+import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import StreamingResponse
 
+from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse
+from schemas.suggestion_schema import SuggestionsResponse
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
 from services.rag_service import RAGService
+from services.agent_service.workflow_service import WorkflowService
+from api.dependencies import get_workflow
+from state.agent_state import AgentState
 
 logger = logging.getLogger("rag-service.api.chat")
 
@@ -26,15 +35,6 @@ def get_rag_service() -> RAGService:
         _rag_service = RAGService()
     return _rag_service
 
-class ChatRequest(BaseModel):
-    message: str
-    filters: Optional[Dict[str, Any]] = None
-    limit: int = 5
-
-class ChatResponse(BaseModel):
-    answer: str
-    model: str
-    sources: List[Any] = []
 
 @router.post("/only-llm", response_model=ChatResponse)
 def chat_finetuned(req: ChatRequest, rag_service: RAGService = Depends(get_rag_service)) -> ChatResponse:
@@ -47,6 +47,7 @@ def chat_finetuned(req: ChatRequest, rag_service: RAGService = Depends(get_rag_s
         sources=result.get("sources", [])
     )
 
+
 @router.post("/base-llm", response_model=ChatResponse)
 def chat_base(req: ChatRequest, rag_service: RAGService = Depends(get_rag_service)) -> ChatResponse:
     """Chat với model GỐC + hệ thống RAG để so sánh."""
@@ -57,3 +58,68 @@ def chat_base(req: ChatRequest, rag_service: RAGService = Depends(get_rag_servic
         model=OLLAMA_BASE_LLM_MODEL,
         sources=result.get("sources", [])
     )
+
+@router.post("/llm-extended", response_model=AgentState)
+async def chat_with_workflow(req: ChatRequest, wf: WorkflowService = Depends(get_workflow)) -> AgentState:
+    """Chat với model FINE-TUNE kèm workflow Multi Agent."""
+    thread_id = req.thread_id if req.thread_id else uuid.uuid4().hex
+    state = await wf.invoke(req.message, thread_id, filters=req.filters)
+    # final_ai_response = state.get("final_ai_response", "")
+    # route = state.get("route", "")
+    # return WorkflowResponse(answer=final_ai_response, route=route)
+    return state
+
+
+@router.post("/stream")
+async def chat_stream(req: ChatRequest, wf: WorkflowService = Depends(get_workflow)) -> StreamingResponse:
+    """Chat workflow Multi Agent — STREAM tiến trình (thinking) + output ra UI qua SSE.
+
+    Mỗi dòng SSE là `data: <StreamEvent json>\\n\\n`. FE đọc bằng fetch + ReadableStream
+    (POST nên không dùng EventSource). Kết thúc bằng event type=done từ node finalize.
+    """
+    thread_id = req.thread_id if req.thread_id else uuid.uuid4().hex
+
+    async def gen():
+        try:
+            async for ev in wf.astream(req.message, thread_id, filters=req.filters):
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            # FE bấm Dừng / đóng popup -> abort fetch. Starlette cancel task này, LangGraph
+            # hủy node đang chạy, request tới Ollama bị hủy theo. Re-raise để cancel lan tiếp.
+            logger.info("Stream bị hủy bởi client thread=%s", thread_id)
+            raise
+        except Exception as e:  # lỗi giữa chừng -> báo 1 event ERROR rồi đóng stream
+            logger.exception("Stream workflow failed thread=%s", thread_id)
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",   # tắt buffer của nginx để FE thấy realtime
+        },
+    )
+
+@router.get("/works/suggestions", response_model=SuggestionsResponse)
+def get_work_suggestions(
+    work_title: str = Query(..., description="Tên tác phẩm cần lấy câu hỏi gợi ý"),
+    rag_service: RAGService = Depends(get_rag_service)
+) -> SuggestionsResponse:
+    """Lấy danh sách 3 câu hỏi gợi ý cho một tác phẩm (hỗ trợ lazy-caching)."""
+    try:
+        res = rag_service.get_suggested_questions(work_title)
+        return SuggestionsResponse(
+            ten_tac_pham=res["ten_tac_pham"],
+            tac_gia=res["tac_gia"],
+            suggested_questions=res["suggested_questions"]
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error("Lỗi khi lấy câu hỏi gợi ý: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi hệ thống khi lấy câu hỏi gợi ý: {str(e)}"
+        )

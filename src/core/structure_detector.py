@@ -120,6 +120,10 @@ class StructureDetector:
     def _classify_heading_level(self, text: str) -> int:
         text_stripped = text.strip()
         
+        normalized = self._normalize_for_matching(text_stripped)
+        if normalized in ["phien am", "dich nghia", "dich tho"]:
+            return 3
+            
         if self._is_generic_section_heading(text_stripped):
             return 1
             

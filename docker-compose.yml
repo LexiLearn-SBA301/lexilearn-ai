@@ -23,12 +23,30 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: rag-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   ollama:
     image: ollama/ollama:latest
     container_name: rag-ollama
     restart: unless-stopped
     ports:
       - "11434:11434"
+    # Mặc định Ollama chỉ chạy 1 request/lượt -> 4 critic (Tool 2) fan-out song song phải
+    # xếp hàng nối đuôi, và 1 lượt chat deep độc chiếm Ollama khiến mọi request khác treo.
+    environment:
+      OLLAMA_NUM_PARALLEL: "4"
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
@@ -84,6 +102,8 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       ollama:
         condition: service_healthy
       ollama-init:
@@ -98,7 +118,7 @@ services:
     # Config hạ tầng + model: commit lên git, và GHI ĐÈ env_file nếu trùng key
     # (nên giá trị localhost lỡ có trong .env cũng không phá Docker).
     environment:
-      MONGODB_URI: "mongodb://mongo:27017/rag_db"
+      REDIS_URL: "redis://redis:6379"
       OLLAMA_URL: "http://ollama:11434"
       FINE_TUNED_OLLAMA_LLM_MODEL: "hf.co/Tobi2904/qwen-finetuned-dpo-gguf:latest"
       OLLAMA_EMBED_MODEL: "bge-m3"
@@ -108,13 +128,14 @@ services:
       - ./docs:/app/docs:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
+      interval: 60s
       timeout: 5s
       retries: 5
 
 volumes:
   mongo-data:
   ollama-data:
+  redis-data:
 
 # lệnh pull 2 model
 #docker compose --profile compare up -d --build.

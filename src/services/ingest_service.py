@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from db.mongo_client import connect_to_mongo, get_database
 from core.pdf_reader import PDFReader
+from core.docx_reader import DocxReader
 from core.structure_detector import StructureDetector
 from core.semantic_chunker import SemanticChunker
 from core.chunk_validator import ChunkValidator
@@ -17,7 +18,11 @@ from core.mongo_writer import MongoWriter
 from core.gemini_corrector import GeminiCorrector
 from core.gemini_analyzer import GeminiAnalyzer
 from models.chunk_schema import ChunkSchema, ChunkPosition, ChunkMetadata
-
+from providers.gemini_provider import gemini_provider
+from google.genai import types
+from schemas.suggestion_schema import SuggestedQuestionsOut
+from config.prompt_template import SUGGESTED_QUESTIONS_PROMPT_TEMPLATE
+import json
 logger = logging.getLogger("rag-service.services.ingest-service")
 logging.basicConfig(level=logging.INFO)
 
@@ -65,11 +70,11 @@ class IngestService:
         # Load known authors configuration
         current_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.normpath(os.path.join(current_dir, "..", "config", "ingest_service_config.json"))
-        import json
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        self.known_authors = config.get("known_authors", {})
-        self.work_to_author = config.get("work_to_author", {})
+            self.known_authors = config.get("known_authors", {})
+            self.work_to_author = config.get("work_to_author", {})
+            self.excluded_titles = config.get("excluded_titles", ["SÁCH GIÁO KHOA", "ĐỌC THÊM", "GIỚI THIỆU", "TỔNG KẾT", "MỞ ĐẦU", "LỜI NÓI ĐẦU"])
         self.page_offsets = config.get("page_offsets", {})
         
         logger.info("IngestService initialized successfully.")
@@ -83,7 +88,7 @@ class IngestService:
         pdf_files = []
         if os.path.isdir(pdf_path_or_dir):
             for filename in os.listdir(pdf_path_or_dir):
-                if filename.endswith(".pdf"):
+                if filename.endswith(".pdf") or filename.endswith(".docx"):
                     pdf_files.append(os.path.normpath(os.path.join(pdf_path_or_dir, filename)))
         elif os.path.isfile(pdf_path_or_dir):
             pdf_files.append(os.path.normpath(pdf_path_or_dir))
@@ -91,7 +96,7 @@ class IngestService:
             raise FileNotFoundError(f"Path not found: {pdf_path_or_dir}")
 
         if not pdf_files:
-            raise ValueError(f"No PDF files found in: {pdf_path_or_dir}")
+            raise ValueError(f"No PDF/Docx files found in: {pdf_path_or_dir}")
 
         # Generate unique job ID
         job_id = f"job_{uuid.uuid4().hex[:12]}"
@@ -184,6 +189,63 @@ class IngestService:
         # 3. Fallback to default
         return title.upper(), "Bộ Giáo Dục và Đào Tạo"
 
+    def _generate_and_save_suggestions(self, work_title: str, author: str, grade: int, semester: int, chunk_texts: list[str]) -> None:
+        """
+        Generates 3 suggested questions for a unique work and saves to works_metadata.
+        """
+        try:
+            client = gemini_provider.get_client()
+            if not client:
+                logger.warning("Không có GEMINI_API_KEY. Bỏ qua việc tự động sinh câu hỏi gợi ý.")
+                return
+            
+            sample_text = "\n\n".join(chunk_texts)[:2000]
+            
+            prompt = SUGGESTED_QUESTIONS_PROMPT_TEMPLATE.format(
+                title=work_title,
+                author=author,
+                grade=grade,
+                semester=semester,
+                sample_text=sample_text
+            )
+            
+            gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                
+            resp = client.models.generate_content(
+                model=gemini_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=SuggestedQuestionsOut,
+                    temperature=0.7
+                )
+            )
+            
+            data = json.loads(resp.text)
+            questions = data.get("questions", [])
+            if not questions:
+                logger.warning(f"Gemini trả về danh sách câu hỏi rỗng cho tác phẩm '{work_title}'")
+                return
+                
+            works_col = self.db["works_metadata"]
+            works_col.update_one(
+                {"ten_tac_pham": work_title.upper()},
+                {
+                    "$set": {
+                        "ten_tac_pham": work_title.upper(),
+                        "tac_gia": author,
+                        "lop": grade,
+                        "hoc_ki": semester,
+                        "suggested_questions": questions,
+                        "updated_at": datetime.now(timezone.utc)
+                    }
+                },
+                upsert=True
+            )
+            logger.info(f"Đã sinh và lưu 3 câu hỏi gợi ý cho tác phẩm: {work_title.upper()}")
+        except Exception as e:
+            logger.error(f"Lỗi khi sinh câu hỏi gợi ý cho '{work_title}': {e}")
+
 
     def _run_ingestion_sync(self, job_id: str, pdf_files: List[str], use_llm_corrector: bool = False) -> None:
         """
@@ -207,9 +269,11 @@ class IngestService:
 
         try:
             # Initialize components once
-            reader = PDFReader()
-            corrector = GeminiCorrector() if use_llm_corrector else None
-            analyzer = GeminiAnalyzer() if use_llm_corrector else None
+            pdf_reader = PDFReader()
+            docx_reader = DocxReader()
+            # corrector and analyzer disabled per user request
+            corrector = None
+            analyzer = None
             detector = StructureDetector()
             chunker = SemanticChunker()
             validator = ChunkValidator()
@@ -223,13 +287,15 @@ class IngestService:
                 filename = os.path.basename(pdf_path)
                 logger.info(f"[{job_id}] Processing file: {filename}")
                 try:
-                    # 1. Read PDF
-                    elements = reader.read(pdf_path)
+                    # 1. Read Document
+                    if filename.lower().endswith(".docx"):
+                        elements = docx_reader.read(pdf_path)
+                    else:
+                        elements = pdf_reader.read(pdf_path)
+                        
                     if not elements:
-                        gemini_key = os.getenv("GEMINI_API_KEY")
                         raise ValueError(
-                            f"Tệp PDF '{filename}' không chứa văn bản dạng số (digital text) và tất cả OCR dự phòng thất bại. "
-                            f"Kiểm tra GEMINI_API_KEY (hiện tại: {'có' if gemini_key else 'chưa cấu hình'})"
+                            f"Tệp '{filename}' không chứa văn bản dạng số hoặc không thể trích xuất."
                         )
                         
                     # 1.5 Gemini Corrector (Always check everything if enabled)
@@ -290,6 +356,20 @@ class IngestService:
                     ai_metadata_count = 0
                     fallback_metadata_count = 0
 
+                    work_groups = {}
+                    work_info = {}
+                    work_genres = {}
+
+                    # First pass: Extract genre for each literary work
+                    for chunk in passed_chunks:
+                        resolved_title = chunk.ten_tac_pham or "Sách Giáo Khoa"
+                        clean_title, _ = self._clean_title_and_author(resolved_title)
+                        title_upper = clean_title.upper().strip()
+                        
+                        match = re.search(r'Thể loại:\s*([^\n]+)', chunk.content, re.IGNORECASE)
+                        if match and title_upper not in work_genres:
+                            work_genres[title_upper] = match.group(1).strip()
+
                     for idx, chunk in enumerate(passed_chunks):
                         # Generate embedding
                         emb_vector = embedder.embed_query(chunk.content)
@@ -301,11 +381,7 @@ class IngestService:
                             chunk_index=idx,
                             total_chunks=total_chunks
                         )
-                        resolved_title = self._resolve_work_title(
-                            chunk.section_title,
-                            chunk.page_start,
-                            sections
-                        )
+                        resolved_title = chunk.ten_tac_pham or "Sách Giáo Khoa"
                         clean_title, resolved_author = self._clean_title_and_author(resolved_title)
 
                         # Prefer AI-extracted metadata if available
@@ -317,14 +393,27 @@ class IngestService:
                             fallback_metadata_count += 1
                         final_author = chunk.tac_gia if chunk.tac_gia else resolved_author
 
+                        title_upper = final_title.upper().strip()
+                        if title_upper and title_upper not in self.excluded_titles:
+                            if title_upper not in work_groups:
+                                work_groups[title_upper] = []
+                            if len(work_groups[title_upper]) < 5:
+                                work_groups[title_upper].append(chunk.content)
+                            work_info[title_upper] = {
+                                "tac_gia": final_author,
+                                "lop": file_metadata["lop"],
+                                "hoc_ki": file_metadata["hoc_ki"]
+                            }
+
                         # Use Gemini-extracted year, or None if unavailable
                         final_year = getattr(chunk, 'nam_sang_tac', None)
+                        final_genre = work_genres.get(title_upper, "Chưa rõ")
 
                         metadata = ChunkMetadata(
                             ten_tac_pham=final_title.upper(),
                             tac_gia=final_author,
                             lop=file_metadata["lop"],
-                            the_loai=chunk.content_type,
+                            the_loai=final_genre,
                             hoc_ki=file_metadata["hoc_ki"],
                             nam_sang_tac=final_year,
                             tags=chunk.tags,
@@ -353,6 +442,17 @@ class IngestService:
                     logger.info(
                         f"[{job_id}] Metadata source: {ai_metadata_count} chunks từ Gemini AI, "
                         f"{fallback_metadata_count} chunks dùng fallback (rule-based).")
+
+                    # Sinh và lưu câu hỏi gợi ý cho tất cả các tác phẩm tìm thấy trong file này
+                    for work_title, chunk_texts in work_groups.items():
+                        info = work_info[work_title]
+                        self._generate_and_save_suggestions(
+                            work_title=work_title,
+                            author=info["tac_gia"],
+                            grade=info["lop"],
+                            semester=info["hoc_ki"],
+                            chunk_texts=chunk_texts
+                        )
 
                     processed_count += 1
                     # Update progress in DB
