@@ -40,14 +40,28 @@ Nhiệm vụ: đọc câu hỏi của học sinh và phân loại thành 1 trong
   Ví dụ: "Phân tích tâm lý nhân vật Tràng", "Cảm nhận bi kịch của Chí Phèo",
   "So sánh hình tượng người phụ nữ trong hai tác phẩm".
 
-Ngoài route, quyết định need_retrieval (có cần tra cứu kho tài liệu không):
-- need_retrieval=false khi:
+YÊU CẦU SỬA LẠI BÀI ĐÃ VIẾT — luật này ĐÈ LÊN cách chọn route ở trên:
+Nếu lịch sử hội thoại cho thấy trợ lý ĐÃ viết một bài phân tích/bài văn, và câu hỏi MỚI là
+lời chê hoặc đòi sửa CHÍNH bài đó ("thân bài ngắn quá", "kết bài chưa sâu, viết lại", "thêm
+dẫn chứng vào", "bỏ mở bài đi", "viết lại dài hơn"):
+- route = "factual", KHÔNG phải "deep_analysis" — dù câu chữ nghe hệt như đòi phân tích sâu.
+  Bài cũ đã có sẵn, việc cần làm là SỬA nó, không phải phân tích lại từ đầu.
+- refine_instruction = MỆNH LỆNH cụ thể, tự đủ nghĩa, viết cho người thợ sửa bài đọc: nêu rõ
+  SỬA PHẦN NÀO và SỬA THẾ NÀO. Ví dụ: "Viết lại phần thân bài dài hơn và phân tích sâu hơn,
+  giữ nguyên mở bài và kết bài."
+- Mọi câu hỏi KHÁC: refine_instruction = null.
+
+Ngoài route, quyết định need_retrieval. Câu hỏi cần trả lời là "câu hỏi này ĐÃ KÈM SẴN
+văn bản để phân tích chưa?", KHÔNG phải "yêu cầu này có cần thông tin mới không?".
+- need_retrieval=false CHỈ trong 2 ca:
   (a) Lời chào/tán gẫu/câu hỏi meta không liên quan văn học ("xin chào", "bạn là ai",
       "cảm ơn"): không có gì để tra cứu.
-  (b) Người dùng đã DÁN SẴN đoạn thơ/văn bản ngay trong câu hỏi và chỉ muốn phân tích
-      chính đoạn đó: tra cứu thêm chỉ gây nhiễu.
-- need_retrieval=true khi câu hỏi nói VỀ một tác phẩm nhưng KHÔNG kèm sẵn văn bản
-  -> cần lấy dẫn chứng từ kho tài liệu.
+  (b) Câu hỏi CHÉP NGUYÊN VĂN đoạn thơ/văn cần phân tích vào ngay trong câu hỏi và chỉ
+      muốn phân tích chính đoạn đó: tra cứu thêm chỉ gây nhiễu.
+- MỌI trường hợp còn lại: need_retrieval=true. Gồm cả khi câu hỏi chỉ NHẮC TÊN tác phẩm
+  mà không chép văn bản vào, và khi người dùng chê/đòi sửa câu trả lời trước ("kết bài
+  ngắn quá, viết lại", "phân tích sâu hơn", "thêm dẫn chứng") — những câu này KHÔNG chứa
+  văn bản tác phẩm, nên vẫn phải lấy lại từ kho mới viết đúng được.
 
 Và quyết định on_topic (câu hỏi có thuộc phạm vi hỗ trợ không):
 - on_topic=false khi câu hỏi NGOÀI văn học Việt Nam: lập trình/code, toán, hình học,
@@ -63,8 +77,18 @@ bằng thực thể cụ thể dựa vào lịch sử). Nếu câu hỏi đã t�
 câu hỏi đó. Ví dụ: lịch sử nói về "Chí Phèo" + câu mới "phân tích tác phẩm đó" ->
 retrieval_query = "Phân tích tác phẩm Chí Phèo của Nam Cao".
 
+QUY TẮC NGÔN NGỮ CHO `reasoning` (BẮT BUỘC):
+`reasoning` hiển thị THẲNG cho người dùng cuối là học sinh/giáo viên. Viết 1–2 câu như đang nói
+với học sinh về việc bạn sắp làm cho họ, KHÔNG phải giải trình nội bộ.
+CẤM nhắc tên kỹ thuật trong `reasoning`: 'factual', 'deep_analysis', 'route', 'định tuyến',
+'need_retrieval', 'refine_instruction', 'Mode A', 'schema', 'pipeline', 'theo luật', 'phân loại'.
+VÍ DỤ SAI: "Theo luật, đây là yêu cầu 'factual' để sửa bài, không phải 'deep_analysis' từ đầu."
+VÍ DỤ ĐÚNG: "Bạn muốn phần thân bài dài và sâu hơn — mình sẽ tra lại tác phẩm để lấy thêm dẫn
+chứng rồi viết lại phần đó, các phần khác giữ nguyên."
+
 Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, on_topic, retrieval_query,
-work_title, author, detected_entities, requested_dimensions, reasoning (giải thích ngắn vì sao chọn route).
+refine_instruction, work_title, author, detected_entities, requested_dimensions, reasoning
+(nói ngắn gọn cho học sinh biết bạn sắp làm gì — theo đúng quy tắc ngôn ngữ ở trên).
 """
 
 
@@ -75,6 +99,7 @@ class _Decision(BaseModel):
     need_retrieval: bool = True
     on_topic: bool = True
     retrieval_query: str = ""                  # câu tra cứu độc lập đã resolve tham chiếu từ lịch sử
+    refine_instruction: Optional[str] = None   # mệnh lệnh sửa bài lượt trước; null nếu không phải ca sửa bài
     work_title: Optional[str] = None
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)
@@ -148,9 +173,13 @@ def supervisor(state: AgentState) -> dict:
     messages = state.get("messages", []) or []
     history_text = _render_history(messages)
     d = _classify(query, history_text)
+    # Ca sửa bài lượt trước -> Mode A thi hành mệnh lệnh (factual_node). Ép route=FACTUAL kể cả
+    # khi Gemini lỡ chọn deep_analysis: câu chê bài ("thân bài chưa sâu") nghe hệt yêu cầu phân
+    # tích sâu, mà deep sẽ bỏ qua instruction rồi viết lại bài MỚI từ đầu, vứt bài cũ đi.
+    refine_instruction = (d.refine_instruction or "").strip() or None
     # Câu ngoài văn học -> luôn về factual để trả lời từ chối cố định (factual_node),
     # kể cả khi Gemini lỡ định tuyến sang deep_analysis.
-    route = Route.FACTUAL if not d.on_topic else d.route
+    route = Route.FACTUAL if (not d.on_topic or refine_instruction) else d.route
     # retrieval_query đã resolve; rỗng (fallback/không có lịch sử) -> dùng chính câu hỏi gốc.
     retrieval_query = (d.retrieval_query or "").strip() or query
     intent = IntentAnalysis(
@@ -160,6 +189,7 @@ def supervisor(state: AgentState) -> dict:
         confidence=d.confidence,
         need_retrieval=d.need_retrieval,
         on_topic=d.on_topic,
+        refine_instruction=refine_instruction,
         work_title=d.work_title,
         author=d.author,
         detected_entities=d.detected_entities,

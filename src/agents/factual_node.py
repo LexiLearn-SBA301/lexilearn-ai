@@ -33,15 +33,21 @@ def factual_node(state: AgentState, rag_service: Optional[RAGService] = None) ->
         }
     # Supervisor quyết định có tra cứu không (chào hỏi/tán gẫu -> khỏi retrieve).
     need_retrieval = getattr(intent, "need_retrieval", True)
+    # != None -> supervisor giao lệnh SỬA bài văn lượt trước: vẫn retrieve (cần ngữ liệu để lấy
+    # dẫn chứng) nhưng rag_service đổi sang REFINE_PROMPT; bài cũ model đọc từ `history`.
+    refine_instruction = getattr(intent, "refine_instruction", None)
 
     if rag_service:
-        logger.info(f"Factual node querying RAGService for: {query} (retrieve={need_retrieval})")
+        logger.info(f"Factual node querying RAGService for: {query} (retrieve={need_retrieval}, refine={bool(refine_instruction)})")
         if need_retrieval:
-            emitter.status("factual", "Đang tra cứu tài liệu…")
+            emitter.status(
+                "factual",
+                "Đang tra cứu lại tác phẩm để sửa bài…" if refine_instruction else "Đang tra cứu tài liệu…",
+            )
 
         filters = state.get("filters", {})
         # Dùng model fine-tune như yêu cầu của user
-        result = rag_service.query(query=query, filters=filters, model_name=FINE_TUNED_OLLAMA_LLM_MODEL, retrieve=need_retrieval, history=history)
+        result = rag_service.query(query=query, filters=filters, model_name=FINE_TUNED_OLLAMA_LLM_MODEL, retrieve=need_retrieval, history=history, refine_instruction=refine_instruction)
 
         answer = result.get("answer", "Không có câu trả lời.")
         raw_sources = result.get("sources", [])

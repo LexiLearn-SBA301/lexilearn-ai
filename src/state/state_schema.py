@@ -58,7 +58,8 @@ def append_events(left: Optional[list], right: Optional[list]) -> list:
 # =============================================================================
 
 class Route(str, Enum):
-    FACTUAL = "factual"            # Mode A: RAG trả lời ngắn có dẫn chứng
+    FACTUAL = "factual"            # Mode A: RAG 1 lượt gọi — trả lời ngắn có dẫn chứng, HOẶC
+                                   # sửa lại bài văn lượt trước (intent.refine_instruction)
     DEEP = "deep_analysis"         # Deep pipeline: context -> debate -> essay
 
 
@@ -138,6 +139,8 @@ class IntentAnalysis(BaseModel):
     confidence: float = 0.0
     need_retrieval: bool = True               # False khi chào hỏi/tán gẫu hoặc user đã dán sẵn văn bản -> khỏi tra cứu DB
     on_topic: bool = True                      # False khi câu hỏi NGOÀI văn học (toán/code/khoa học...) -> trả lời từ chối cố định
+    refine_instruction: Optional[str] = None  # != None khi user đòi SỬA bài lượt trước ("thân bài ngắn quá"): mệnh lệnh
+                                              # supervisor giao cho Mode A thi hành. Bài cũ lấy từ `messages` (history)
     work_title: Optional[str] = None         # tác phẩm
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)
