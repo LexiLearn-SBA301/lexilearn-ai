@@ -12,6 +12,12 @@ import os
 
 logger = logging.getLogger("rag-service.db.checkpointer")
 
+# TTL cho checkpoint trên Redis (phút). Không set = mỗi thread để lại key (checkpoint +
+# writes + blobs) nằm trong RAM VĨNH VIỄN tới khi Redis restart/evict. 30' = cửa sổ
+# resume/nhớ ngắn hạn; nguồn lịch sử DÀI HẠN là DB của Java BE, không phải Redis.
+# Mỗi lượt chat mới ghi checkpoint mới -> TTL làm mới, nên hội thoại đang active không hết hạn.
+CHECKPOINT_TTL_MINUTES = 30
+
 
 async def get_checkpointer():
     """Tạo AsyncRedisSaver từ REDIS_URL (mặc định redis://localhost:6379), đã setup index.
@@ -24,9 +30,9 @@ async def get_checkpointer():
     from langgraph.checkpoint.redis import AsyncRedisSaver
 
     try:
-        checkpointer = AsyncRedisSaver(redis_url)
+        checkpointer = AsyncRedisSaver(redis_url, ttl={"default_ttl": CHECKPOINT_TTL_MINUTES})
         await checkpointer.asetup()  # tạo index lần đầu (idempotent các lần sau)
-        logger.info("AsyncRedisSaver checkpointer sẵn sàng (%s).", redis_url)
+        logger.info("AsyncRedisSaver checkpointer sẵn sàng (%s, TTL=%s phút).", redis_url, CHECKPOINT_TTL_MINUTES)
         return checkpointer
     except Exception as e:
         logger.warning(f"Lỗi kết nối Redis ({e}). Tự động fallback sang MemorySaver (chỉ dùng cho DEV)!")
