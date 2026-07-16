@@ -52,12 +52,14 @@ def _stub_graph():
         return {}
 
     def run_turn(state: AgentState) -> dict:
+        from langchain_core.messages import HumanMessage
         return {
             "context": "CONTEXT-" + state["human_message"],
             "retry_counts": {"prepare_context": 2},          # xài hết quota retry
             "best_attempts": {"write_essay": {"output": "BÀI-" + state["human_message"],
                                               "score": 0.9}},
             "events": [StreamEvent(seq=1, type=EventType.STATUS, node="run_turn")],
+            "messages": [HumanMessage(content=state["human_message"], id=state.get("run_id", "test_id"))]
         }
 
     g = StateGraph(AgentState)
