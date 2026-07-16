@@ -20,6 +20,7 @@ from typing import Annotated, Any, Literal, Optional
 from typing_extensions import TypedDict
 
 from langgraph.graph.message import add_messages
+from langchain_core.messages import HumanMessage
 
 # Tái dùng toàn bộ sub-model / enum / reducer đã định nghĩa
 from state.state_schema import (
@@ -111,7 +112,7 @@ def init_state(human_message: str, thread_id: str, run_id: str, filters: Optiona
         current_stage=Stage.INTENT,
         current_node="supervisor:intent",
         human_message=human_message,
-        messages=[{"role": "user", "content": human_message}],
+        messages=[HumanMessage(content=human_message, id=run_id)],
         intent=None,
         route=None,
         filters=filters,
