@@ -10,7 +10,7 @@ from core.embedder import Embedder
 from core.mongo_writer import MongoWriter
 from retrievals.rrf import reciprocal_rank_fusion
 from providers.ollama_provider import ollama_provider
-from config.prompt_template import SYSTEM_PROMPT
+from config.prompt_template import SYSTEM_PROMPT, REFINE_PROMPT
 from security.injection_guard import InjectionGuard
 from providers.gemini_provider import gemini_provider
 from google.genai import types
@@ -206,12 +206,18 @@ class RAGService:
 
         return ordered_docs
 
-    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5, model_name: Optional[str] = None, retrieve: bool = True) -> Dict[str, Any]:
+    def query(self, query: str, filters: Optional[Dict[str, Any]] = None, limit: int = 5, model_name: Optional[str] = None, retrieve: bool = True, history: Optional[List[Any]] = None, refine_instruction: Optional[str] = None) -> Dict[str, Any]:
         """
         Answer a RAG query by retrieving contexts and calling Ollama LLM to synthesize the final answer.
 
         retrieve=False: bỏ qua tra cứu (chào hỏi/tán gẫu) -> trả lời trực tiếp bằng
         CHITCHAT_PROMPT, sources rỗng.
+
+        refine_instruction != None: user đòi SỬA bài văn lượt trước -> vẫn retrieve (cần ngữ liệu
+        để lấy dẫn chứng) nhưng đổi sang REFINE_PROMPT. Bài cũ model tự đọc từ `history`.
+
+        history: các lượt hội thoại TRƯỚC (BaseMessage), chèn giữa system và câu hỏi hiện tại để
+        model trả lời có mạch (Mode A). None = không có lịch sử (giữ hành vi cũ).
         """
         # Guard against prompt injection
         guard_res = self.guard.check_query(query)
@@ -245,8 +251,17 @@ class RAGService:
                     context_parts.append(part)
                 context = "\n\n".join(context_parts)
 
-            system_prompt = SYSTEM_PROMPT
-            user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
+            if refine_instruction:
+                system_prompt = REFINE_PROMPT
+                user_prompt = (
+                    f"Ngữ liệu (văn bản gốc, dùng để lấy dẫn chứng):\n---\n{context}\n---\n\n"
+                    f"YÊU CẦU SỬA BÀI: {refine_instruction}\n\n"
+                    f"Nguyên văn lời người dùng: {query}\n\n"
+                    "Bài văn hoàn chỉnh sau khi sửa:"
+                )
+            else:
+                system_prompt = SYSTEM_PROMPT
+                user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
 
         try:
             if model_name:
@@ -254,10 +269,10 @@ class RAGService:
             else:
                 llm = ollama_provider.get_llm()
             from langchain_core.messages import SystemMessage, HumanMessage
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
+            messages: List[Any] = [SystemMessage(content=system_prompt)]
+            if history:
+                messages.extend(history)     # nối 2 list cho nhau  [1,2] extend [3,4] = [1,2,3,4]
+            messages.append(HumanMessage(content=user_prompt))
             response = llm.invoke(messages)
             if isinstance(response.content, str):
                 answer = response.content.strip()

@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
 from state.agent_state import AgentState
 from state.state_schema import EventEmitter, FinalOutput, Route, Stage, Verdict, safe_stream_writer
@@ -89,8 +89,16 @@ def finalize(state: AgentState) -> dict:
             "citations": len(citations),
         },
     )
+    # messages = lịch sử các lượt ĐÃ XONG. Nhập cặp của lượt này (human hỏi + AI đáp) vào đây.
+    # Giữ sliding window ≤ 10 message (5 cặp): thêm cặp mới -> đẩy cặp cũ nhất ra (RemoveMessage
+    # theo id) để checkpoint không phình vô hạn theo phiên chat.
+    WINDOW = 10
+    existing = state.get("messages", []) or []
+    new_pair = [HumanMessage(content=state.get("human_message", "")), AIMessage(content=answer)]
+    overflow = len(existing) + len(new_pair) - WINDOW
+    removals = [RemoveMessage(id=m.id) for m in existing[:overflow]] if overflow > 0 else []
     return {
-        "messages": [AIMessage(content=answer)],   # add_messages nối vào lịch sử
+        "messages": removals + new_pair,   # add_messages: xóa cặp cũ nhất (nếu tràn) + nối cặp mới
         "final_ai_response": answer,
         "final_output": final_output,
         "current_stage": Stage.DONE,

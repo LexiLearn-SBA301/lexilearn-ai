@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
-from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse
+from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse, SeedRequest
 from schemas.suggestion_schema import SuggestionsResponse
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
 from services.rag_service import RAGService
@@ -101,6 +101,22 @@ async def chat_stream(req: ChatRequest, wf: WorkflowService = Depends(get_workfl
             "X-Accel-Buffering": "no",   # tắt buffer của nginx để FE thấy realtime
         },
     )
+
+@router.get("/exists/{thread_id}")
+async def chat_thread_exists(thread_id: str, wf: WorkflowService = Depends(get_workflow)) -> dict:
+    """[Nội bộ, BE gọi] Checkpoint của thread_id còn lịch sử không -> BE quyết seed hay không."""
+    return {"thread_id": thread_id, "exists": await wf.thread_exists(thread_id)}
+
+
+@router.post("/seed")
+async def chat_seed(req: SeedRequest, wf: WorkflowService = Depends(get_workflow)) -> dict:
+    """[Nội bộ, BE gọi] Nạp lịch sử vào checkpoint khi mở lại chat cũ (checkpoint nguội).
+
+    KHÔNG chạy graph — chỉ ghi messages vào state. BE gọi trước khi stream nếu /exists=false.
+    """
+    seeded = await wf.seed_history(req.thread_id, req.history)
+    return {"thread_id": req.thread_id, "seeded": seeded}
+
 
 @router.get("/works/suggestions", response_model=SuggestionsResponse)
 def get_work_suggestions(

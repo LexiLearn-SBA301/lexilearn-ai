@@ -124,8 +124,10 @@ async def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
         chunks = [SourceChunk(chunk_id="user-input", text=raw_query, metadata=meta)]
         emitter.status("prepare_context", "Phân tích trực tiếp văn bản bạn cung cấp (không tra cứu thư viện).")
     else:
-        # Ưu tiên keyword đã tách (work_title + author + entities); rỗng -> fallback câu hỏi gốc.
-        query = _build_retrieval_query(intent) or raw_query
+        # Ưu tiên keyword đã tách (work_title + author + entities); rỗng -> câu đã resolve tham
+        # chiếu (retrieval_query) tốt hơn raw_query khi câu hỏi kiểu "phân tích tác phẩm đó".
+        resolved = (getattr(intent, "retrieval_query", "") or "").strip() if intent else ""
+        query = _build_retrieval_query(intent) or resolved or raw_query
 
         filters = state.get("filters", {}) or {}
         if intent:
