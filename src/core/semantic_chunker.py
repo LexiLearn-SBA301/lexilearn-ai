@@ -32,6 +32,8 @@ class SemanticChunk:
     tac_gia: Optional[str] = None
     is_biography: bool = False
     nam_sang_tac: Optional[int] = None
+    chunk_category: Optional[str] = None
+    section_slug: Optional[str] = None
 
 class SemanticChunker:
     """
@@ -77,6 +79,31 @@ class SemanticChunker:
         ascii_text = re.sub(r'[^a-z0-9]+', '_', ascii_text)
         slug = re.sub(r'_+', '_', ascii_text).strip('_')
         return slug if slug else "chunk"
+
+    def _determine_chunk_category(self, title: str) -> str:
+        """
+        Determines the chunk category based on the section title.
+        """
+        if not title:
+            return "analysis"
+        title_lower = title.lower()
+        if "tác giả" in title_lower:
+            return "author_bio"
+        if "hoàn cảnh" in title_lower:
+            return "historical_context"
+        if "giá trị hiện thực" in title_lower:
+            return "reality_value"
+        if "giá trị nhân đạo" in title_lower:
+            return "human_value"
+        if "nghệ thuật" in title_lower:
+            return "art_value"
+        if "ý nghĩa nhan đề" in title_lower:
+            return "title_meaning"
+        if "nội dung văn bản gốc" in title_lower:
+            return "text_section"
+        if "bố cục" in title_lower:
+            return "layout_analysis"
+        return "analysis"
 
     def _generate_chunk_id(self, title: str, index: int) -> str:
         """
@@ -332,6 +359,8 @@ class SemanticChunker:
                 
             parent_section = section.parent_title
             
+            chunk_category = self._determine_chunk_category(section.title)
+            
             section_slug = self._slugify(section.title)
             if section_slug not in slug_counters:
                 slug_counters[section_slug] = 0
@@ -357,7 +386,8 @@ class SemanticChunker:
                     char_count=0,
                     has_overlap=False,
                     overlap_from_chunk=None,
-                    ten_tac_pham=current_work_title
+                    ten_tac_pham=current_work_title,
+                    chunk_category=chunk_category
                 )
                 chunks.append(empty_chunk)
                 continue
@@ -365,63 +395,26 @@ class SemanticChunker:
             current_group: List[str] = []
             section_chunks: List[SemanticChunk] = []
             
-            for paragraph in section.content:
-                if not paragraph or not paragraph.strip():
-                    logger.debug(f"Skipping empty paragraph in section '{section.title}'")
-                    continue
+            # State variables for structured sections
+            current_text_slug = None
+            current_text_title = None
+            current_text_format = None
+            
+            def _flush_current_group():
+                nonlocal current_group, section_chunks, slug_counters, chunks
+                if not current_group:
+                    return
                     
-                p_text = paragraph.strip()
+                active_slug = current_text_slug if current_text_slug else section_slug
                 
-                if self._should_split(current_group, p_text):
-                    slug_counters[section_slug] += 1
-                    chunk_id = self._generate_chunk_id(section.title, slug_counters[section_slug])
-                    
-                    raw_content = "\n\n".join(current_group)
-                    
-                    overlap_text = ""
-                    has_overlap = False
-                    overlap_from_chunk = None
-                    if section_chunks:
-                        prev_chunk = section_chunks[-1]
-                        overlap_text = self._generate_overlap(prev_chunk)
-                        if overlap_text:
-                            has_overlap = True
-                            overlap_from_chunk = prev_chunk.chunk_id
-                            
-                    final_content = f"{overlap_text}\n\n{raw_content}" if overlap_text else raw_content
-                    
-                    content_type = self._detect_content_type(section.title, final_content)
-                    tags = self._generate_tags(section.title, final_content)
-                    token_count = self._estimate_token_count(final_content)
-                    char_count = len(final_content)
-                    
-                    new_chunk = SemanticChunk(
-                        chunk_id=chunk_id,
-                        title=section.title,
-                        content=final_content,
-                        content_type=content_type,
-                        page_start=section.page_start,
-                        page_end=section.page_end,
-                        section_title=section_title,
-                        subsection_title=subsection_title,
-                        parent_section=parent_section,
-                        tags=tags,
-                        token_count=token_count,
-                        char_count=char_count,
-                        has_overlap=has_overlap,
-                        overlap_from_chunk=overlap_from_chunk,
-                        ten_tac_pham=current_work_title
-                    )
-                    section_chunks.append(new_chunk)
-                    chunks.append(new_chunk)
-                    
-                    current_group = [p_text]
+                if active_slug not in slug_counters:
+                    slug_counters[active_slug] = 0
+                slug_counters[active_slug] += 1
+                
+                if current_text_slug:
+                    chunk_id = f"{active_slug}_{slug_counters[active_slug]:03d}"
                 else:
-                    current_group.append(p_text)
-                    
-            if current_group:
-                slug_counters[section_slug] += 1
-                chunk_id = self._generate_chunk_id(section.title, slug_counters[section_slug])
+                    chunk_id = self._generate_chunk_id(section.title, slug_counters[active_slug])
                 
                 raw_content = "\n\n".join(current_group)
                 
@@ -437,7 +430,7 @@ class SemanticChunker:
                         
                 final_content = f"{overlap_text}\n\n{raw_content}" if overlap_text else raw_content
                 
-                content_type = self._detect_content_type(section.title, final_content)
+                content_type = current_text_format if current_text_format else self._detect_content_type(section.title, final_content)
                 tags = self._generate_tags(section.title, final_content)
                 token_count = self._estimate_token_count(final_content)
                 char_count = len(final_content)
@@ -449,7 +442,7 @@ class SemanticChunker:
                     content_type=content_type,
                     page_start=section.page_start,
                     page_end=section.page_end,
-                    section_title=section_title,
+                    section_title=current_text_title if current_text_title else section_title,
                     subsection_title=subsection_title,
                     parent_section=parent_section,
                     tags=tags,
@@ -457,8 +450,38 @@ class SemanticChunker:
                     char_count=char_count,
                     has_overlap=has_overlap,
                     overlap_from_chunk=overlap_from_chunk,
-                    ten_tac_pham=current_work_title
+                    ten_tac_pham=current_work_title,
+                    chunk_category=chunk_category,
+                    section_slug=current_text_slug
                 )
+                section_chunks.append(new_chunk)
                 chunks.append(new_chunk)
+                current_group.clear()
+
+            for paragraph in section.content:
+                if not paragraph or not paragraph.strip():
+                    logger.debug(f"Skipping empty paragraph in section '{section.title}'")
+                    continue
+                    
+                p_text = paragraph.strip()
+                
+                if chunk_category == "text_section":
+                    section_match = re.match(r'^(?:[#]*\s*)?section:\s*([a-zA-Z0-9\-]+)\s*\|\s*(.+?)\s*\|\s*(PROSE|POETRY|MIXED)', p_text, flags=re.IGNORECASE)
+                    if section_match:
+                        _flush_current_group()
+                        current_text_slug = section_match.group(1).strip()
+                        current_text_title = section_match.group(2).strip()
+                        raw_format = section_match.group(3).strip().lower()
+                        current_text_format = "poem" if raw_format == "poetry" else ("prose" if raw_format == "mixed" else raw_format)
+                        continue
+                
+                if self._should_split(current_group, p_text):
+                    _flush_current_group()
+                    current_group.append(p_text)
+                else:
+                    current_group.append(p_text)
+                    
+            if current_group:
+                _flush_current_group()
                 
         return chunks

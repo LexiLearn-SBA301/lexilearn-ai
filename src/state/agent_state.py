@@ -20,6 +20,7 @@ from typing import Annotated, Any, Literal, Optional
 from typing_extensions import TypedDict
 
 from langgraph.graph.message import add_messages
+from langchain_core.messages import HumanMessage
 
 # Tái dùng toàn bộ sub-model / enum / reducer đã định nghĩa
 from state.state_schema import (

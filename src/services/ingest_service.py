@@ -417,7 +417,10 @@ class IngestService:
                             hoc_ki=file_metadata["hoc_ki"],
                             nam_sang_tac=final_year,
                             tags=chunk.tags,
-                            is_biography=chunk.is_biography
+                            is_biography=chunk.is_biography,
+                            chunk_category=chunk.chunk_category,
+                            section_slug=chunk.section_slug,
+                            section_title=chunk.section_title
                         )
                         search_text = remove_vietnamese_accents(chunk.content)
 

@@ -26,6 +26,9 @@ def _make_mock_chunk(chunk_id="chunk_1"):
     mock_chunk.nam_sang_tac = 2024
     mock_chunk.is_biography = False
     
+    mock_chunk.chunk_category = "text_section"
+    mock_chunk.section_slug = "test-slug"
+    
     mock_metadata = MagicMock()
     mock_chunk.metadata = mock_metadata
     
