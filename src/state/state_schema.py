@@ -132,7 +132,8 @@ class Citation(BaseModel):
 # =============================================================================
 
 class IntentAnalysis(BaseModel):
-    raw_query: str
+    raw_query: str                            # câu user gõ NGUYÊN VĂN (giữ để hiển thị/log/fallback)
+    retrieval_query: str = ""                 # câu tra cứu ĐỘC LẬP do supervisor resolve từ lịch sử ("tác phẩm đó" -> "Chí Phèo"); dùng thay raw_query khi retrieve
     route: Route
     confidence: float = 0.0
     need_retrieval: bool = True               # False khi chào hỏi/tán gẫu hoặc user đã dán sẵn văn bản -> khỏi tra cứu DB

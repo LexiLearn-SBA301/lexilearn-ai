@@ -54,8 +54,17 @@ Và quyết định on_topic (câu hỏi có thuộc phạm vi hỗ trợ không
   khoa học, thời tiết, đời sống chung... (vd "java là ngôn ngữ lập trình đúng không").
 - on_topic=true khi là lời chào/xã giao HOẶC hỏi–đáp/phân tích về văn học.
 
-Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, on_topic, work_title,
-author, detected_entities, requested_dimensions, reasoning (giải thích ngắn vì sao chọn route).
+Nếu có "Lịch sử hội thoại gần đây": DÙNG nó để hiểu câu hỏi MỚI. Giải nghĩa đại từ/tham chiếu
+("tác phẩm đó", "nhân vật ấy", "phân tích tiếp") thành tên tác phẩm/nhân vật/tác giả CỤ THỂ,
+và điền work_title/author cho đúng theo ngữ cảnh trước đó.
+
+retrieval_query: viết lại câu hỏi MỚI thành 1 câu tra cứu ĐỘC LẬP, tự đủ nghĩa (thay đại từ
+bằng thực thể cụ thể dựa vào lịch sử). Nếu câu hỏi đã tự đủ nghĩa thì retrieval_query = chính
+câu hỏi đó. Ví dụ: lịch sử nói về "Chí Phèo" + câu mới "phân tích tác phẩm đó" ->
+retrieval_query = "Phân tích tác phẩm Chí Phèo của Nam Cao".
+
+Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, on_topic, retrieval_query,
+work_title, author, detected_entities, requested_dimensions, reasoning (giải thích ngắn vì sao chọn route).
 """
 
 
@@ -65,6 +74,7 @@ class _Decision(BaseModel):
     confidence: float = 0.0
     need_retrieval: bool = True
     on_topic: bool = True
+    retrieval_query: str = ""                  # câu tra cứu độc lập đã resolve tham chiếu từ lịch sử
     work_title: Optional[str] = None
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)
@@ -72,18 +82,46 @@ class _Decision(BaseModel):
     reasoning: str = ""
 
 
-def _classify(query: str) -> _Decision:
+def _render_history(messages: list, max_assistant_chars: int = 500) -> str:
+    """Rút gọn lịch sử thành text cho Gemini resolve tham chiếu. Cắt câu trả lời của trợ lý
+    (có thể là bài văn dài) để prompt không phình — chỉ cần đủ ngữ cảnh nhận diện tác phẩm/nhân vật.
+    `messages` là list BaseMessage của state (đã trừ câu hiện tại); BE đã giới hạn số lượt gửi lên."""
+    if not messages:
+        return ""
+    lines = []
+    for m in messages:
+        role = getattr(m, "type", None)
+        content = getattr(m, "content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        content = content.strip() # tỉa khoảng trắng/\n dính ở mép ngoài cùng
+        if not content:
+            continue
+        if role == "ai":
+            if len(content) > max_assistant_chars:
+                content = content[:max_assistant_chars] + "…"
+            lines.append(f"Trợ lý: {content}")
+        elif role == "human":
+            lines.append(f"Người dùng: {content}")
+    return "\n".join(lines)
+
+
+def _classify(query: str, history_text: str = "") -> _Decision:
     """Gọi Gemini phân loại route. Mọi sự cố -> fallback route=factual."""
     client = gemini_provider.get_client()
     if client is None:
         logger.warning("Thiếu GEMINI_API_KEY -> fallback route=factual.")
         return _Decision(route=Route.FACTUAL,
                          reasoning="[fallback] chưa cấu hình GEMINI_API_KEY")
+    if history_text:
+        contents = f"Lịch sử hội thoại gần đây:\n{history_text}\n\n---\nCâu hỏi mới của người dùng: {query}"
+    else:
+        contents = query
     try:
         from google.genai import types
         resp = client.models.generate_content(
             model=SUPERVISOR_MODEL,
-            contents=query,
+            contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=_SYSTEM_PROMPT,
                 temperature=0.0,
@@ -106,12 +144,18 @@ def _classify(query: str) -> _Decision:
 def supervisor(state: AgentState) -> dict:
     """Node supervisor: phân tích intent + chọn route. Trả về state delta."""
     query = state.get("human_message", "")
-    d = _classify(query)
+    # messages = lịch sử các lượt ĐÃ XONG (câu hiện tại nằm ở human_message, chưa vào messages).
+    messages = state.get("messages", []) or []
+    history_text = _render_history(messages)
+    d = _classify(query, history_text)
     # Câu ngoài văn học -> luôn về factual để trả lời từ chối cố định (factual_node),
     # kể cả khi Gemini lỡ định tuyến sang deep_analysis.
     route = Route.FACTUAL if not d.on_topic else d.route
+    # retrieval_query đã resolve; rỗng (fallback/không có lịch sử) -> dùng chính câu hỏi gốc.
+    retrieval_query = (d.retrieval_query or "").strip() or query
     intent = IntentAnalysis(
         raw_query=query,
+        retrieval_query=retrieval_query,
         route=route,
         confidence=d.confidence,
         need_retrieval=d.need_retrieval,
