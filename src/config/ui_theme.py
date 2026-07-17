@@ -21,6 +21,11 @@ _CRITIC: dict[str, str] = {
     "lich_su":   "#3b82f6",   # blue
     "tam_ly":    "#8b5cf6",   # violet
     "tiep_nhan": "#ec4899",   # pink
+    # Người học — CỐ TÌNH lấy đỏ-gạch thương hiệu (#ab3429), cùng màu bong bóng user ở
+    # box chat: xuyên suốt app màu này đã có nghĩa "bạn". Khác hẳn 4 hue lạnh của critic
+    # nên nhìn phát ra ngay ai là người thật; cũng đủ trầm để không lẫn với đỏ cảnh báo
+    # (#ef4444) của verdict.
+    "human":     "#ab3429",   # brick (brand)
 }
 
 # severity -> màu mặc định
@@ -39,6 +44,8 @@ _EVENT: dict[str, dict[str, str]] = {
     "thinking":       {"variant": "status",     "severity": "info",    "group": "intent"},
     "retrieval":      {"variant": "retrieval",  "severity": "info",    "group": "retrieval"},
     "bulletin":       {"variant": "bulletin",   "severity": "info",    "group": "debate"},
+    "await_human":    {"variant": "await_human", "severity": "info",   "group": "debate"},
+    "debate_lock":    {"variant": "status",     "severity": "info",    "group": "debate"},
     "retry":          {"variant": "judge",      "severity": "warning", "group": "judge"},
     "citation_check": {"variant": "citation",   "severity": "info",    "group": "final"},
     "token":          {"variant": "essay",      "severity": "info",    "group": "final"},

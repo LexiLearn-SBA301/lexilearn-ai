@@ -17,12 +17,17 @@ class ChunkMetadata(BaseModel):
     """
     ten_tac_pham: str = Field(..., description="Tên tác phẩm (ví dụ: Vợ Nhặt)")
     tac_gia: str = Field(..., description="Tên tác giả (ví dụ: Kim Lân)")
-    lop: int = Field(..., description="Lớp học (ví dụ: 12)")
+    lop: Optional[int] = Field(None, description="Lớp học (ví dụ: 12)")
     the_loai: str = Field(..., description="Thể loại văn học (ví dụ: truyen_ngan)")
-    hoc_ki: int = Field(..., description="Học kì học tác phẩm này (ví dụ: 1)")
+    hoc_ki: Optional[int] = Field(None, description="Học kì học tác phẩm này (ví dụ: 1)")
     nam_sang_tac: Optional[int] = Field(None, description="Năm sáng tác tác phẩm (ví dụ: 1962)")
     tags: List[str] = Field(default_factory=list, description="Các nhãn đặc tả nội dung")
     is_biography: bool = Field(False, description="Đánh dấu chunk có nội dung giới thiệu tiểu sử tác giả/tiểu dẫn hay không")
+    
+    # Mở rộng cho cấu trúc văn bản chi tiết
+    chunk_category: Optional[str] = Field(None, description="Phân loại chunk (ví dụ: author_bio, text_section, analysis)")
+    section_slug: Optional[str] = Field(None, description="Slug của đoạn văn bản gốc")
+    section_title: Optional[str] = Field(None, description="Tiêu đề đoạn văn bản gốc")
 
 
 class ChunkSchema(BaseModel):

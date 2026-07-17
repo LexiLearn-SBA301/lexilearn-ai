@@ -17,8 +17,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
+from services.agent_service import debate_session
 from state.agent_state import AgentState
 from state.state_schema import EventEmitter, FinalOutput, Route, Stage, Verdict, safe_stream_writer
 
@@ -46,6 +47,13 @@ def _no_context_answer(state: AgentState) -> str:
 def finalize(state: AgentState) -> dict:
     """Gom kết quả nhánh -> messages + final_ai_response + final_output. Trả state delta."""
     route = state.get("route")
+
+    # Lưới vét cho cờ "tranh luận cùng AI": critics_debate.take_optin() lo ca thường, nhưng
+    # lượt đi nhánh factual (hoặc bị judge loại context) KHÔNG chạy qua debate -> cờ ở lại và
+    # sẽ kích hoạt nhầm ở LƯỢT CHAT SAU của cùng thread. Dọn ở đây vì mọi nhánh đều về finalize.
+    thread_id = state.get("thread_id")
+    if thread_id:
+        debate_session.clear_optin(thread_id)
 
     # Kiểu 1: dispatch theo route -> biết answer (+ citations/sources) nằm field nào.
     if route == Route.DEEP:
@@ -89,8 +97,16 @@ def finalize(state: AgentState) -> dict:
             "citations": len(citations),
         },
     )
+    # messages = lịch sử các lượt ĐÃ XONG. Nhập cặp của lượt này (human hỏi + AI đáp) vào đây.
+    # Giữ sliding window ≤ 10 message (5 cặp): thêm cặp mới -> đẩy cặp cũ nhất ra (RemoveMessage
+    # theo id) để checkpoint không phình vô hạn theo phiên chat.
+    WINDOW = 10
+    existing = state.get("messages", []) or []
+    new_pair = [HumanMessage(content=state.get("human_message", "")), AIMessage(content=answer)]
+    overflow = len(existing) + len(new_pair) - WINDOW
+    removals = [RemoveMessage(id=m.id) for m in existing[:overflow]] if overflow > 0 else []
     return {
-        "messages": [AIMessage(content=answer)],   # add_messages nối vào lịch sử
+        "messages": removals + new_pair,   # add_messages: xóa cặp cũ nhất (nếu tràn) + nối cặp mới
         "final_ai_response": answer,
         "final_output": final_output,
         "current_stage": Stage.DONE,

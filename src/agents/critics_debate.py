@@ -25,6 +25,7 @@ Phân chia file của Tool 2:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Annotated, Any, Optional
@@ -37,6 +38,8 @@ from langgraph.graph import END, START, StateGraph
 from agents.debate_schemas import CriticR1Out, CriticR2Out
 from config.critic_prompts import CRITIC_PERSONAS
 from config.ui_theme import ui_meta
+from services.agent_service import debate_session
+from services.agent_service.debate_session import HumanReply, normalize_arg_id
 from state.state_schema import (
     CRITIC_DISPLAY,
     Argument,
@@ -77,6 +80,12 @@ class DebateSubState(TypedDict, total=False):
     context_summary: str
     chunks: list[SourceChunk]        # đoạn văn bản CHUNG (từ Tool 1) cho cả 4 critic
     judge_feedback: str               # feedback của supervisor_judge lượt RETRY trước (rỗng nếu lần đầu)
+    # 2 field dưới phục vụ "tranh luận cùng người học": node human_r1/human_r2 dùng
+    # thread_id làm khoá phiên chờ (debate_session). human_in_debate ĐỌC 1 LẦN ở node
+    # public rồi truyền xuống -> hai node human đọc CÙNG một giá trị, không tự tra lại
+    # cờ (tra lại = bỏ qua vòng 1 xong là mất luôn quyền vào vòng 2).
+    thread_id: str
+    human_in_debate: bool
     # 4 node ghi song song -> cần reducer merge_dict
     round1: Annotated[dict[CriticRole, CriticTurn], merge_dict]
     round2: Annotated[dict[CriticRole, CriticTurn], merge_dict]
@@ -116,16 +125,6 @@ async def _fallback_text(llm, msgs) -> str:
         return f"[lỗi gọi model: {e}]"
 
 
-def _normalize_arg_id(raw: str) -> str:
-    """Chuẩn hoá id model trả về trước khi tra bulletin.
-
-    Bảng tin in id trong ngoặc vuông ("[lich_su-a1]") cho dễ đọc, và Qwen chép NGUYÊN CẢ
-    NGOẶC. So thẳng với arg_ids (không ngoặc) sẽ trượt 100% -> mọi rebuttal bị loại ->
-    vòng 2 rỗng trơn. Nhận cả 2 dạng thay vì bắt model đoán ý.
-    """
-    return (raw or "").strip().strip("[]").strip().lower()
-
-
 def _target_from_arg_id(arg_id: str, valid_ids: set[str]) -> Optional[CriticRole]:
     """arg_id ("lich_su-a2" hoặc "[lich_su-a2]") -> critic BỊ phản biện; None nếu id không có thật.
 
@@ -134,7 +133,7 @@ def _target_from_arg_id(arg_id: str, valid_ids: set[str]) -> Optional[CriticRole
     (số thứ tự luận điểm reset theo từng critic -> "point 2" của critic nào cũng tồn tại),
     sinh ra ca "bắt bẻ luận điểm của Lịch sử nhưng FE in là Trả lời Tiếp nhận".
     """
-    aid = _normalize_arg_id(arg_id)
+    aid = normalize_arg_id(arg_id)
     if aid not in valid_ids:
         return None
     try:
@@ -230,10 +229,13 @@ def _render_bulletin(bulletin: list[BulletinEntry], exclude: CriticRole) -> str:
             if s:
                 lines.append(f"      Lý lẽ: {s}")
         pts = "\n".join(lines) or "  (không có luận điểm)"
-        blocks.append(
-            f"### {CRITIC_DISPLAY[e.critic]} ({e.critic.value})\n"
-            f"Luận đề: {e.thesis}\n{pts}"
-        )
+        # Bỏ hẳn dòng "Luận đề" khi trống thay vì in nhãn cụt. Lượt của NGƯỜI HỌC không có
+        # luận đề (họ gõ thẳng từng luận điểm, không qua LLM tóm ý) -> in "Luận đề: " rỗng
+        # trông như dữ liệu hỏng và khiến model tưởng họ chẳng có quan điểm gì.
+        head = f"### {CRITIC_DISPLAY[e.critic]} ({e.critic.value})"
+        if e.thesis:
+            head += f"\nLuận đề: {e.thesis}"
+        blocks.append(f"{head}\n{pts}")
     return "\n\n".join(blocks) if blocks else "(bảng tin trống)"
 
 
@@ -243,20 +245,43 @@ def build_r2_prompt(
     bulletin: list[BulletinEntry],
     chunks: list[SourceChunk],
     question: str = "",
+    has_human: bool = False,
 ) -> str:
-    """Human prompt vòng 2: critic đọc lại ĐỀ BÀI + VĂN BẢN GỐC + Bulletin rồi phản biện 3 critic KHÁC.
+    """Human prompt vòng 2: critic đọc lại ĐỀ BÀI + VĂN BẢN GỐC + Bulletin rồi phản biện những
+    người tham gia KHÁC (3 critic còn lại, cộng NGƯỜI HỌC nếu họ có phát biểu ở vòng 1).
 
     chunks BẮT BUỘC có mặt: thiếu văn bản gốc, critic không đối chiếu được dẫn chứng nên
     chỉ còn nước phát biểu lại luận đề vòng 1 của mình -> "phản biện" hoá ra là nêu quan
     điểm cá nhân, không bắt bẻ được ai.
+
+    has_human: BẮT BUỘC suy từ bulletin CÓ THẬT entry của người học hay không (xem _speak_r2),
+    KHÔNG phải từ cờ opt-in. Người học bật nút rồi bấm "Bỏ qua" -> opt-in vẫn True nhưng bảng
+    tin KHÔNG có id 'human-...'; ra lệnh nhắm vào id không tồn tại thì model buộc phải BỊA id
+    -> _target_from_arg_id() loại sạch -> vòng 2 của critic đó trống trơn.
     """
     display = CRITIC_DISPLAY[role]
+    others = "những người tham gia KHÁC (gồm cả NGƯỜI HỌC)" if has_human else "các nhà phê bình KHÁC"
+    # Tiêu chí ĐẾM ĐƯỢC ("ĐÚNG 1 phản biện nhắm id human-...") thay vì lời khuyên thái độ
+    # ("nhớ để ý người học"): lời khuyên thì model gật rồi bỏ qua, còn cái này verify được
+    # bằng code y như cách _speak_r2 lọc target_arg_id.
+    #
+    # Phải có CẬN TRÊN, không chỉ cận dưới. Đo thật với qwen2.5:3b: ra lệnh "ít nhất 1" thì
+    # nó dồn 3/3 phản biện vào người học và bỏ hẳn 5 luận điểm của critic khác. Nhân với 4
+    # critic = người học lãnh cả chục phản biện còn tranh luận AI–AI biến mất — mà chính
+    # phần đó mới là nguyên liệu cho bài luận.
+    human_clause = (
+        f"- Trong bảng tin có luận điểm của NGƯỜI HỌC (id bắt đầu bằng 'human-'). Hãy dành "
+        f"ĐÚNG 1 phản biện (không nhiều hơn) nhắm vào một id 'human-...'; những phản biện "
+        f"còn lại PHẢI nhắm vào nhà phê bình khác. Đối xử với người học đúng như một đồng "
+        f"nghiệp trong hội đồng: đọc kỹ lý lẽ, đối chiếu VĂN BẢN GỐC, công nhận phần đứng "
+        f"vững và chỉ thẳng phần chưa vững. KHÔNG khen lấy lệ, cũng KHÔNG hạ thấp.\n"
+    ) if has_human else ""
     return (
         f"{_question_block(question)}"
         f"VĂN BẢN GỐC (nguồn dẫn chứng DUY NHẤT — mọi phản biện phải đối chiếu với đây):\n"
         f"{_render_chunks(chunks)}\n\n"
         f"Luận đề vòng 1 của chính bạn ({display}):\n{own_thesis or '(trống)'}\n\n"
-        f"BẢNG TIN CHUNG — luận đề & luận điểm của các nhà phê bình KHÁC.\n"
+        f"BẢNG TIN CHUNG — luận đề & luận điểm của {others}.\n"
         f"Mỗi luận điểm có một ID trong ngoặc vuông, vd [lich_su-a2]:\n"
         f"{_render_bulletin(bulletin, role)}\n\n"
         f"Nhiệm vụ ({display}) — ĐỐI THOẠI với lập luận của họ, không trình bày lại quan điểm "
@@ -275,6 +300,7 @@ def build_r2_prompt(
         f"luận điểm bạn nhắm tới — phải là id CÓ THẬT trong bảng tin trên, KHÔNG tự bịa, "
         f"KHÔNG dùng id của chính bạn), 'stance' (agree | disagree | qualify), và 'reason'.\n"
         f"- 'reason' phải nói đúng về luận điểm mang id bạn đã chọn.\n"
+        f"{human_clause}"
         f"- Đưa ra 2–3 phản biện.\n"
         f"- Viết bằng tiếng Việt."
     )
@@ -330,12 +356,15 @@ async def _speak_r2(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
     own = state.get("round1", {}).get(role)
     own_thesis = own.thesis if own else ""
     bulletin = state.get("bulletin", [])
+    # Suy TỪ bulletin, không từ cờ opt-in: bật nút rồi bỏ qua vòng 1 = không có entry human.
+    has_human = any(e.critic == CriticRole.HUMAN for e in bulletin)
     msgs = [
         SystemMessage(content=CRITIC_PERSONAS[role]),
         HumanMessage(content=build_r2_prompt(
             role, own_thesis, bulletin,
             state.get("chunks", []),
             state.get("question", ""),
+            has_human=has_human,
         )),
     ]
     try:
@@ -351,7 +380,7 @@ async def _speak_r2(role: CriticRole, state: DebateSubState, llm) -> CriticTurn:
                                role.value, r.target_arg_id, sorted(valid_arg_ids))
                 continue
             rebs.append(Rebuttal(
-                target_critic=target, target_arg_id=_normalize_arg_id(r.target_arg_id),
+                target_critic=target, target_arg_id=normalize_arg_id(r.target_arg_id),
                 stance=r.stance, reason=r.reason,
             ))
         if out.rebuttals and not rebs:
@@ -393,18 +422,85 @@ def _turn_payload(round_no: int, turn: CriticTurn) -> dict:
     }
 
 
+def _live_seq(role: CriticRole, round_no: int) -> int:
+    """
+    vòng 1: 4 5 6
+    vòng 2: 14 15 16
+    """
+    idx = CRITIC_ORDER.index(role) if role in CRITIC_ORDER else len(CRITIC_ORDER)
+    return (0 if round_no == 1 else 10) + idx + 1
+
+
+def _turn_content(round_no: int, role: CriticRole, turn: CriticTurn) -> str:
+    """
+    xử lý chuỗi an toàn không trả về luận đề lúc r2 nữa
+    và trả null nếu role là người đọc ( theo thiết kế người đọc không có luận điểm )
+    """
+    if round_no == 2:
+        return "" if turn.rebuttals else "(không đưa ra phản biện nào)"
+    if turn.thesis:
+        return turn.thesis
+    return "" if role == CriticRole.HUMAN else "(chưa parse được luận điểm)"
+
+
 def _emit_live_turn(writer, role: CriticRole, round_no: int, turn: CriticTurn) -> None:
     if writer is None:
         return
     payload = _turn_payload(round_no, turn)
     payload["ui"] = ui_meta(EventType.CRITIC_TURN, role=role)
     ev = StreamEvent(
-        seq=(0 if round_no == 1 else 10) + CRITIC_ORDER.index(role) + 1,
+        seq=_live_seq(role, round_no),
         type=EventType.CRITIC_TURN,
         node=f"critic:{role.value}:r{round_no}",
         actor=CRITIC_DISPLAY[role],
-        content=turn.thesis or "(chưa parse được luận điểm)",
+        content=_turn_content(round_no, role, turn),
         payload=payload,
+        ts=_now(),
+    )
+    writer(ev.model_dump(mode="json"))
+
+
+def _emit_await_human(writer, round_no: int, valid_arg_ids: set[str]) -> None:
+    """Báo FE mở ô nhập. CHỈ stream, KHÔNG persist (trạng thái UI nhất thời, replay vô nghĩa).
+
+    payload.round quyết định FE hiện giao diện nào: vòng 1 = ô text tự do (nêu luận điểm
+    của mình), vòng 2 = chọn luận điểm để reply + stance. valid_arg_ids để FE chỉ cho chọn
+    id CÓ THẬT — sai id thì /chat/debate/reply trả 400.
+    """
+    if writer is None:
+        return
+    ev = StreamEvent(
+        seq=_live_seq(CriticRole.HUMAN, round_no),
+        type=EventType.AWAIT_HUMAN,
+        node=f"debate:await_human:r{round_no}",
+        actor=CRITIC_DISPLAY[CriticRole.HUMAN],
+        content=("Mời bạn nêu luận điểm của mình về câu hỏi này."
+                 if round_no == 1 else
+                 "Mời bạn phản biện các nhà phê bình."),
+        payload={
+            "round": round_no,
+            "max_turns": debate_session.MAX_HUMAN_TURNS,
+            "idle_timeout_s": debate_session.IDLE_TIMEOUT_S,
+            "valid_arg_ids": sorted(valid_arg_ids),
+            "ui": ui_meta(EventType.AWAIT_HUMAN),
+        },
+        ts=_now(),
+    )
+    writer(ev.model_dump(mode="json"))
+
+
+def _emit_human_closed(writer, round_no: int, reason: str, content: str) -> None:
+    """Đóng ô nhập ở FE (hết giờ / đã kết thúc / đã đủ số tin). Chỉ stream, không persist."""
+    if writer is None:
+        return
+    ev = StreamEvent(
+        seq=_live_seq(CriticRole.HUMAN, round_no),
+        type=EventType.AWAIT_HUMAN,
+        node=f"debate:await_human:r{round_no}:closed",
+        actor=CRITIC_DISPLAY[CriticRole.HUMAN],
+        content=content,
+        payload={"round": round_no, "closed": True, "reason": reason,
+                 "ui": ui_meta(EventType.AWAIT_HUMAN)},
         ts=_now(),
     )
     writer(ev.model_dump(mode="json"))
@@ -414,7 +510,7 @@ def _emit_live_bulletin(writer, bulletin: list[BulletinEntry]) -> None:
     if writer is None:
         return
     ev = StreamEvent(
-        seq=5, type=EventType.BULLETIN, node="debate:bulletin",
+        seq=6, type=EventType.BULLETIN, node="debate:bulletin",
         content="Bảng tin chung đã sẵn sàng.",
         payload={
             "entries": [{"critic": e.critic.value, "thesis": e.thesis,
@@ -446,13 +542,131 @@ def make_r2_node(role: CriticRole, llm):
     return _node
 
 
+# =============================================================================
+# Node của NGƯỜI HỌC — điểm PAUSE. Nói SAU 4 critic mỗi vòng (đọc hết ý kiến hội đồng
+# rồi mới phát biểu), nên đứng giữa fan-in R1 và bulletin (vòng 1), giữa fan-in R2 và
+# collect (vòng 2).
+# =============================================================================
+
+async def _collect_human(thread_id: str, round_no: int, valid_arg_ids: set[str],
+                         writer) -> list[HumanReply]:
+    """PAUSE tại đây tới khi người học gửi đủ / bấm kết thúc / hết giờ im lặng.
+
+       1. get() thấy queue rỗng → tạo một Future, để lại số điện thoại trong self._getters, rồi ngủ. Coroutine bị gỡ khỏi event loop
+      hoàn toàn, không tốn CPU.
+      2. put_nowait() đẩy item vào, rồi gọi lại theo số điện thoại đó (waiter.set_result(None)).
+      3. Event loop thấy Future xong → xếp coroutine kia vào hàng chạy lại → get() tỉnh dậy, loop lại, thấy queue không rỗng nữa →
+      get_nowait() lấy item ra.
+    """
+    p = debate_session.open_session(thread_id, round_no, valid_arg_ids)
+
+    _emit_await_human(writer, round_no, valid_arg_ids)
+    replies: list[HumanReply] = []
+    reason, note = "ended", "Bạn đã kết thúc phần phát biểu."
+    try:
+        while len(replies) < debate_session.MAX_HUMAN_TURNS:
+            try:
+                item = await asyncio.wait_for(p.queue.get(),
+                                              timeout=debate_session.IDLE_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                reason, note = "timeout", "Hết thời gian chờ — hội đồng tiếp tục."
+                logger.info("human_r%d: im lặng quá %.0fs -> đi tiếp (%d tin).",
+                            round_no, debate_session.IDLE_TIMEOUT_S, len(replies))
+                break
+            if item is None:          # Bỏ qua / Kết thúc phản biện — cùng 1 tín hiệu
+                break
+            replies.append(item)
+            # Bắn NGAY từng tin thay vì gom cả lượt rồi bắn một cục ở cuối: người học Enter
+            # xong phải thấy tin của mình hiện lên liền, chứ không ngồi nhìn màn hình im
+            _emit_live_turn(writer, CriticRole.HUMAN, round_no,
+                            _human_turn(round_no, [item], valid_arg_ids,
+                                        start=len(replies)))
+        else:
+            reason, note = "max_turns", f"Đã đủ {debate_session.MAX_HUMAN_TURNS} lượt phát biểu."
+    finally:
+        # Đóng phiên kể cả khi bị huỷ (người dùng bấm Dừng -> CancelledError) -> không để
+        # lại phiên ma khiến submit() sau đó treo vào queue không ai đọc.
+        debate_session.close_session(thread_id)
+    _emit_human_closed(writer, round_no, reason, note)
+    logger.info("human_r%d: nhận %d tin (%s).", round_no, len(replies), reason)
+    return replies
+
+
+def _human_turn(round_no: int, replies: list[HumanReply],
+                valid_arg_ids: set[str], *, start: int = 1) -> CriticTurn:
+    """Gói các tin của người học thành CriticTurn — CÙNG cấu trúc critic AI dùng.
+
+    Vòng 1 -> Argument có arg_id 'human-aN': đó là thứ DUY NHẤT khiến 4 critic bắt bẻ
+    ngược lại được ở vòng 2 (Rebuttal không có id nên không thể bị nhắm tới).
+    thesis để TRỐNG: người học gõ thẳng từng luận điểm, không qua LLM tóm ý; gán tin đầu
+    làm luận đề thì nó bị in 2 lần (vừa luận đề vừa human-a1) ở cả prompt lẫn UI.
+
+    Vòng 2 -> Rebuttal: target_arg_id + stance đã được submit() validate rồi.
+
+    start: số thứ tự arg_id của tin ĐẦU trong `replies`. Cần vì hàm này được gọi 2 kiểu —
+    gói CẢ lượt (start=1, dựng state) và gói ĐÚNG 1 tin vừa nhận để bắn live ngay
+    (start=vị trí thật). Thiếu nó thì mọi tin bắn live đều mang id 'human-a1'.
+    """
+    if round_no == 1:
+        args = [Argument(arg_id=f"human-a{i}", point=r.message, support="")
+                for i, r in enumerate(replies, start)]
+        return CriticTurn(critic=CriticRole.HUMAN, round=1, thesis="", arguments=args,
+                          parsed_ok=True, spoke_at=_now())
+
+    rebs = []
+    for r in replies:
+        target = _target_from_arg_id(r.target_arg_id or "", valid_arg_ids)
+        if target is None:      # submit() đã chặn -> tới đây coi như không xảy ra
+            logger.warning("human_r2: bỏ phản biện, target_arg_id=%r lạ", r.target_arg_id)
+            continue
+        rebs.append(Rebuttal(
+            target_critic=target, target_arg_id=normalize_arg_id(r.target_arg_id),
+            stance=r.stance, reason=r.message,
+        ))
+    return CriticTurn(critic=CriticRole.HUMAN, round=2, bulletin_seen=True, thesis="",
+                      rebuttals=rebs, parsed_ok=True, spoke_at=_now())
+
+
+def make_human_node(round_no: int):
+    """Node PAUSE của người học cho 1 vòng.
+
+    Opt-in tắt -> return {} NGAY: node thành no-op thuần. Nhờ vậy KHÔNG cần conditional
+    edge hay dựng 2 biến thể subgraph — luồng cũ chạy y nguyên xuyên qua node này, và
+    mọi test cũ (assert round1 đúng 4 key) vẫn xanh.
+    """
+    async def _node(state: DebateSubState) -> dict:
+        if not state.get("human_in_debate"):
+            return {}
+        thread_id = state.get("thread_id") or ""
+        if not thread_id:
+            # Không có khoá phiên thì người học không gửi tin tới đâu được -> đừng pause
+            logger.warning("human_r%d: thiếu thread_id -> bỏ lượt người học.", round_no)
+            return {}
+
+        # Vòng 1 chưa có gì để nhắm tới; vòng 2 chỉ được nhắm id CÓ THẬT trong bảng tin.
+        valid = {aid for e in state.get("bulletin", []) for aid in e.arg_ids}
+        writer = safe_stream_writer()
+        replies = await _collect_human(thread_id, round_no, valid, writer)
+        if not replies:
+            return {}                       # bỏ qua / hết giờ -> hội đồng đi tiếp
+
+        # KHÔNG bắn live ở đây: _collect_human đã bắn từng tin lúc nhận rồi, bắn thêm bản
+        # gộp nữa là FE vẽ lại y hệt lần hai. Bản gộp chỉ dùng để dựng STATE (bulletin,
+        # bài luận) và để critics_debate() ghi milestone persist — cả hai đều không live.
+        turn = _human_turn(round_no, replies, valid)
+        return {f"round{round_no}": {CriticRole.HUMAN: turn}}
+    return _node
+
+
 def bulletin_node(state: DebateSubState) -> dict:
-    """Barrier sau R1: parse 4 lượt R1 thành Bulletin chung cho R2 đọc."""
+    """Barrier sau R1: parse các lượt R1 (4 critic + người học nếu có) thành Bulletin cho R2."""
     r1 = state.get("round1", {})
     bulletin = []
-    for role in CRITIC_ORDER:
+    for role in CRITIC_ORDER + [CriticRole.HUMAN]:
         turn = r1.get(role)
         if not turn:
+            # Guard sẵn có này nuốt luôn cả ca người học vắng mặt (bỏ qua / hết giờ / không
+            # bật opt-in) -> không cần nhánh riêng nào cho "không có human".
             continue
         bulletin.append(BulletinEntry(
             critic=role,
@@ -466,10 +680,14 @@ def bulletin_node(state: DebateSubState) -> dict:
 
 
 def collect_node(state: DebateSubState) -> dict:
-    """Barrier sau R2: gom điểm đồng thuận / tranh cãi từ stance của các rebuttal."""
+    """Barrier sau R2: gom điểm đồng thuận / tranh cãi từ stance của các rebuttal.
+
+    Tính cả phản biện của NGƯỜI HỌC: stance của họ là stance thật (họ tự chọn), nên
+    đóng góp của họ vào consensus/contested có giá trị y như của critic.
+    """
     r2 = state.get("round2", {})
     consensus, contested = [], []
-    for role in CRITIC_ORDER:
+    for role in CRITIC_ORDER + [CriticRole.HUMAN]:
         turn = r2.get(role)
         if not turn:
             continue
@@ -500,17 +718,24 @@ def build_debate_subgraph(llm):
         # giống  g.add_node("supervisor", supervisor)
         # make_r1_node(role, llm) ở đây thực chất là 1 lệnh thực thi hàm chứ không phải là lưu địa chỉ cho LangGraph gọi
         # và LangGraph chỉ nhận địa chỉ của hàm có tham số truyền vào duy nhất là State
+    g.add_node("human_r1", make_human_node(1))
     g.add_node("bulletin", bulletin_node)
     for role in CRITIC_ORDER:
         g.add_node(f"{role.value}_r2", make_r2_node(role, llm))
+    g.add_node("human_r2", make_human_node(2))
     g.add_node("collect", collect_node)
 
+    # human_r1 thay bulletin làm BARRIER của vòng 1: người học phải đọc xong ý kiến của cả
+    # 4 critic rồi mới phát biểu, và phát biểu đó phải kịp vào bulletin để vòng 2 bắt bẻ.
+    # Opt-in tắt -> human_r1/human_r2 là no-op -> chuỗi hệt như cũ, chỉ thêm 1 nhịp rỗng.
     for role in CRITIC_ORDER: # fan-in
         g.add_edge(START, f"{role.value}_r1")       # 4 R1 chạy song song
-        g.add_edge(f"{role.value}_r1", "bulletin")  # 4 node đều trỏ vào bulletin -> rào chắn chờ 4 node hoàn thành
+        g.add_edge(f"{role.value}_r1", "human_r1")  # 4 node đều trỏ vào -> rào chắn chờ đủ 4
+    g.add_edge("human_r1", "bulletin")
     for role in CRITIC_ORDER:
         g.add_edge("bulletin", f"{role.value}_r2")  # 4 R2 chạy song song
-        g.add_edge(f"{role.value}_r2", "collect")   # collect chờ đủ 4 (barrier)
+        g.add_edge(f"{role.value}_r2", "human_r2")  # barrier chờ đủ 4 rồi mới tới lượt người học
+    g.add_edge("human_r2", "collect")
     g.add_edge("collect", END)
     return g.compile()
 
@@ -551,6 +776,20 @@ async def critics_debate(state, *, subgraph=None) -> dict:
     intent = state.get("intent")
     context = state.get("context")
     judge_feedback = (state.get("last_feedback") or {}).get(Stage.CRITICS_DEBATE.value, "")
+    thread_id = state.get("thread_id") or ""
+    # check có đăng ký phản biện trong thread này? và xóa để phục vụ chat sau
+    human_in_debate = debate_session.take_optin(thread_id) if thread_id else False
+    if human_in_debate:
+        # Debate bắt đầu -> khoá nút "Tranh luận cùng AI" trên FE (bấm thêm cũng vô nghĩa:
+        # cờ vừa bị lấy đi rồi).
+        writer = safe_stream_writer()
+        if writer is not None:
+            writer(StreamEvent(
+                seq=state.get("event_seq", 0), type=EventType.DEBATE_LOCK,
+                node="debate:lock", content="Hội đồng bắt đầu tranh luận — bạn sẽ được mời phát biểu.",
+                payload={"locked": True, "ui": ui_meta(EventType.DEBATE_LOCK)}, ts=_now(),
+            ).model_dump(mode="json"))
+
     # Đề bài = human_message (câu người dùng gõ), KHÔNG dùng intent.raw_query: api/debate_router.py
     # gán raw_query = work_title, lấy nhầm sẽ in "CÂU HỎI CỦA NGƯỜI DÙNG: Tỏ lòng".
     # Cùng nguồn với write_essay.py và factual_node.py.
@@ -561,6 +800,8 @@ async def critics_debate(state, *, subgraph=None) -> dict:
         "context_summary": getattr(context, "summary", "") or "",
         "chunks": _chunks_from_context(context),
         "judge_feedback": judge_feedback,
+        "thread_id": thread_id,
+        "human_in_debate": human_in_debate,
         "round1": {}, "round2": {}, "bulletin": [],
         "consensus_points": [], "contested_points": [],
     }
@@ -581,27 +822,34 @@ async def critics_debate(state, *, subgraph=None) -> dict:
 
     # không bắn SEE mục đích ở hàm này là lưu lại presist milestone vào state.events
     emitter = EventEmitter(state, writer=None)
-    for role in CRITIC_ORDER:
+    for role in CRITIC_ORDER + [CriticRole.HUMAN]:
         turn = r1.get(role)
         if turn:
             emitter.critic_turn(f"critic:{role.value}:r1", role,
-                                turn.thesis or "(chưa parse được luận điểm)",
+                                _turn_content(1, role, turn),
                                 actor=CRITIC_DISPLAY[role], payload=_turn_payload(1, turn))
     emitter.bulletin(
         "debate:bulletin", "Bảng tin chung đã sẵn sàng.",
         payload={"entries": [{"critic": e.critic.value, "thesis": e.thesis,
                               "key_points": e.key_points} for e in debate.bulletin]},
     )
-    for role in CRITIC_ORDER:
+    for role in CRITIC_ORDER + [CriticRole.HUMAN]:
         turn = r2.get(role)
         if turn:
             emitter.critic_turn(f"critic:{role.value}:r2", role,
-                                turn.thesis or "(phản biện)",
+                                _turn_content(2, role, turn),
                                 actor=CRITIC_DISPLAY[role], payload=_turn_payload(2, turn))
-    return {
+    delta = {
         "debate": debate,
         "current_stage": Stage.CRITICS_DEBATE,
         "current_node": "critics_debate",
         "events": emitter.milestones,
         "event_seq": emitter.seq,
     }
+    # Người học ĐÃ THẬT SỰ phát biểu -> cấm giám khảo bắt debate chạy lại: retry nghĩa là
+    # cả subgraph chạy lại, tức là hỏi lại người ta từ đầu những gì họ vừa gõ. Chỉ chặn khi
+    # họ có nói; bật nút rồi bỏ qua cả 2 vòng thì retry vẫn vô hại nên để nguyên.
+    if CriticRole.HUMAN in r1 or CriticRole.HUMAN in r2:
+        delta["retry_limits"] = {**(state.get("retry_limits") or {}), "critics_debate": 0}
+        logger.info("Người học đã tham gia -> khoá retry của critics_debate.")
+    return delta

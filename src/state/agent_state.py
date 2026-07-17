@@ -20,6 +20,7 @@ from typing import Annotated, Any, Literal, Optional
 from typing_extensions import TypedDict
 
 from langgraph.graph.message import add_messages
+from langchain_core.messages import HumanMessage
 
 # Tái dùng toàn bộ sub-model / enum / reducer đã định nghĩa
 from state.state_schema import (
@@ -101,8 +102,13 @@ def init_state(human_message: str, thread_id: str, run_id: str, filters: Optiona
     """State khởi đầu cho 1 lần chạy.
 
     Graph chạy trên checkpoint CŨ của thread (persist theo thread_id), nên input này
-    phải XÓA hết kết quả lượt trước: None đi qua reducer = xóa field. Riêng `messages`
-    dùng add_messages -> nối vào lịch sử, KHÔNG xóa (đó là trí nhớ hội thoại).
+    phải XÓA hết kết quả lượt trước: None đi qua reducer = xóa field.
+
+    KHÔNG set `messages`: để lịch sử tích lũy trong checkpointer đi qua NGUYÊN VẸN. Câu hiện
+    tại chỉ nằm ở `human_message` (node đọc trực tiếp); nó CHỈ nhập vào `messages` (cùng câu
+    trả lời) ở node finalize khi lượt ĐÃ XONG -> `messages` luôn đúng nghĩa "các lượt đã hoàn
+    tất", không lẫn câu đang xử lý. Lịch sử được nạp lại từ BE qua endpoint /chat/seed khi mở
+    lại chat cũ (checkpoint nguội).
     """
     return AgentState(
         thread_id=thread_id,
@@ -111,7 +117,7 @@ def init_state(human_message: str, thread_id: str, run_id: str, filters: Optiona
         current_stage=Stage.INTENT,
         current_node="supervisor:intent",
         human_message=human_message,
-        messages=[{"role": "user", "content": human_message}],
+        # KHÔNG set messages -> add_messages giữ nguyên lịch sử tích lũy từ checkpoint
         intent=None,
         route=None,
         filters=filters,

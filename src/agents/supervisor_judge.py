@@ -213,7 +213,7 @@ def _judge(stage: Stage, content: str, *, client=None) -> JudgeOut:
         raise ValueError("Gemini trả về rỗng")
     except Exception as e:
         logger.warning("Judge %s gọi Gemini lỗi (%s) -> fallback verdict=pass.", stage.value, e)
-        return JudgeOut(verdict="pass", reasoning=f"[fallback] lỗi gọi Gemini: {e}")
+        return JudgeOut(verdict="pass", reasoning="Hệ thống giám khảo đang bận, tạm bỏ qua bước duyệt lần này.")
 
 
 # =============================================================================
@@ -291,11 +291,7 @@ def judge_node(state: AgentState, *, client=None) -> dict:
     if verdict == Verdict.RETRY:
         delta["retry_counts"] = {label_stage.value: count + 1}
         delta["last_feedback"] = {label_stage.value: out.feedback}
-        emitter.retry(
-            node_name,
-            out.feedback or "Chưa đạt yêu cầu, chạy lại.",
-            payload={"stage": label_stage.value, "attempt": count + 1, "limit": limit},
-        )
+        # KHÔNG stream out.feedback ra ngoài: đó là hướng dẫn KỸ THUẬT cho máy đọc khi chạy lại
     delta["events"] = emitter.milestones
     delta["event_seq"] = emitter.seq
     return delta

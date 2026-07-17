@@ -58,7 +58,8 @@ def append_events(left: Optional[list], right: Optional[list]) -> list:
 # =============================================================================
 
 class Route(str, Enum):
-    FACTUAL = "factual"            # Mode A: RAG trả lời ngắn có dẫn chứng
+    FACTUAL = "factual"            # Mode A: RAG 1 lượt gọi — trả lời ngắn có dẫn chứng, HOẶC
+                                   # sửa lại bài văn lượt trước (intent.refine_instruction)
     DEEP = "deep_analysis"         # Deep pipeline: context -> debate -> essay
 
 
@@ -76,6 +77,8 @@ class CriticRole(str, Enum):
     LICH_SU = "lich_su"            # Lịch sử: bối cảnh xã hội
     TAM_LY = "tam_ly"              # Tâm lý: nội tâm nhân vật
     TIEP_NHAN = "tiep_nhan"        # Tiếp nhận: góc đương đại
+    HUMAN = "human"                # Người học — thành viên THỨ 5, chỉ có mặt khi bật
+                                   # "tranh luận cùng AI". Nằm trong enum này
 
 
 CRITIC_DISPLAY = {
@@ -83,6 +86,11 @@ CRITIC_DISPLAY = {
     CriticRole.LICH_SU: "Nhà phê bình Lịch sử",
     CriticRole.TAM_LY: "Nhà phê bình Tâm lý",
     CriticRole.TIEP_NHAN: "Nhà phê bình Tiếp nhận",
+    # "Người học" chứ KHÔNG phải "Bạn": chuỗi này đi vào CẢ prompt (_render_bulletin in
+    # "### {CRITIC_DISPLAY[e.critic]}") lẫn event ra FE. Prompt vòng 2 đã xưng hô với
+    # critic là "bạn" ("Luận đề vòng 1 của chính bạn") -> để "Bạn" thì model không phân
+    # biệt được đâu là nó, đâu là người học.
+    CriticRole.HUMAN: "Người học",
 }
 
 
@@ -132,11 +140,17 @@ class Citation(BaseModel):
 # =============================================================================
 
 class IntentAnalysis(BaseModel):
-    raw_query: str
+    raw_query: str                            # câu user gõ NGUYÊN VĂN (giữ để hiển thị/log/fallback)
+    retrieval_query: str = ""                 # câu tra cứu ĐỘC LẬP do supervisor resolve từ lịch sử ("tác phẩm đó" -> "Chí Phèo"); dùng thay raw_query khi retrieve
     route: Route
     confidence: float = 0.0
     need_retrieval: bool = True               # False khi chào hỏi/tán gẫu hoặc user đã dán sẵn văn bản -> khỏi tra cứu DB
     on_topic: bool = True                      # False khi câu hỏi NGOÀI văn học (toán/code/khoa học...) -> trả lời từ chối cố định
+    needs_clarification: bool = False         # True khi yêu cầu phân tích sâu nhưng CHƯA chốt được tác phẩm (câu không nêu
+                                              # + lịch sử không chỉ đúng 1 tác phẩm) -> hỏi lại thay vì đoán bừa rồi phân tích sai
+    clarification_question: str = ""          # câu hỏi lại thân thiện hiển thị cho user khi needs_clarification=True
+    refine_instruction: Optional[str] = None  # != None khi user đòi SỬA bài lượt trước ("thân bài ngắn quá"): mệnh lệnh
+                                              # supervisor giao cho Mode A thi hành. Bài cũ lấy từ `messages` (history)
     work_title: Optional[str] = None         # tác phẩm
     author: Optional[str] = None
     detected_entities: list[str] = Field(default_factory=list)
@@ -296,6 +310,10 @@ class EventType(str, Enum):
     TOKEN = "token"                    # 1 token/chunk văn bản (essay/critic) – chỉ stream
     CRITIC_TURN = "critic_turn"        # 1 critic vừa nói xong (milestone)
     BULLETIN = "bulletin"              # bulletin chung sẵn sàng
+    AWAIT_HUMAN = "await_human"        # ĐANG CHỜ người học phát biểu -> FE mở ô nhập.
+                                       # Chỉ stream (như TOKEN), KHÔNG persist: đây là
+                                       # trạng thái UI nhất thời, replay lại vô nghĩa.
+    DEBATE_LOCK = "debate_lock"        # debate bắt đầu -> FE khoá nút "Tranh luận cùng AI"
     JUDGE = "judge"                    # phán quyết của supervisor
     RETRY = "retry"                    # kích hoạt retry
     CITATION_CHECK = "citation_check"  # kết quả check trích dẫn
