@@ -77,6 +77,8 @@ class CriticRole(str, Enum):
     LICH_SU = "lich_su"            # Lịch sử: bối cảnh xã hội
     TAM_LY = "tam_ly"              # Tâm lý: nội tâm nhân vật
     TIEP_NHAN = "tiep_nhan"        # Tiếp nhận: góc đương đại
+    HUMAN = "human"                # Người học — thành viên THỨ 5, chỉ có mặt khi bật
+                                   # "tranh luận cùng AI". Nằm trong enum này
 
 
 CRITIC_DISPLAY = {
@@ -84,6 +86,11 @@ CRITIC_DISPLAY = {
     CriticRole.LICH_SU: "Nhà phê bình Lịch sử",
     CriticRole.TAM_LY: "Nhà phê bình Tâm lý",
     CriticRole.TIEP_NHAN: "Nhà phê bình Tiếp nhận",
+    # "Người học" chứ KHÔNG phải "Bạn": chuỗi này đi vào CẢ prompt (_render_bulletin in
+    # "### {CRITIC_DISPLAY[e.critic]}") lẫn event ra FE. Prompt vòng 2 đã xưng hô với
+    # critic là "bạn" ("Luận đề vòng 1 của chính bạn") -> để "Bạn" thì model không phân
+    # biệt được đâu là nó, đâu là người học.
+    CriticRole.HUMAN: "Người học",
 }
 
 
@@ -300,6 +307,10 @@ class EventType(str, Enum):
     TOKEN = "token"                    # 1 token/chunk văn bản (essay/critic) – chỉ stream
     CRITIC_TURN = "critic_turn"        # 1 critic vừa nói xong (milestone)
     BULLETIN = "bulletin"              # bulletin chung sẵn sàng
+    AWAIT_HUMAN = "await_human"        # ĐANG CHỜ người học phát biểu -> FE mở ô nhập.
+                                       # Chỉ stream (như TOKEN), KHÔNG persist: đây là
+                                       # trạng thái UI nhất thời, replay lại vô nghĩa.
+    DEBATE_LOCK = "debate_lock"        # debate bắt đầu -> FE khoá nút "Tranh luận cùng AI"
     JUDGE = "judge"                    # phán quyết của supervisor
     RETRY = "retry"                    # kích hoạt retry
     CITATION_CHECK = "citation_check"  # kết quả check trích dẫn

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
+from services.agent_service import debate_session
 from state.agent_state import AgentState
 from state.state_schema import EventEmitter, FinalOutput, Route, Stage, Verdict, safe_stream_writer
 
@@ -46,6 +47,13 @@ def _no_context_answer(state: AgentState) -> str:
 def finalize(state: AgentState) -> dict:
     """Gom kết quả nhánh -> messages + final_ai_response + final_output. Trả state delta."""
     route = state.get("route")
+
+    # Lưới vét cho cờ "tranh luận cùng AI": critics_debate.take_optin() lo ca thường, nhưng
+    # lượt đi nhánh factual (hoặc bị judge loại context) KHÔNG chạy qua debate -> cờ ở lại và
+    # sẽ kích hoạt nhầm ở LƯỢT CHAT SAU của cùng thread. Dọn ở đây vì mọi nhánh đều về finalize.
+    thread_id = state.get("thread_id")
+    if thread_id:
+        debate_session.clear_optin(thread_id)
 
     # Kiểu 1: dispatch theo route -> biết answer (+ citations/sources) nằm field nào.
     if route == Route.DEEP:

@@ -11,7 +11,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from exceptions import LLMServiceError
+from exceptions import DebateInvalidReply, DebateNotWaiting, LLMServiceError
 
 logger = logging.getLogger("rag-service.api.errors")
 
@@ -22,6 +22,19 @@ async def _llm_service_error(request: Request, exc: LLMServiceError) -> JSONResp
         status_code=503,
         content={"detail": "Không gọi được mô hình ngôn ngữ (LLM). Vui lòng thử lại sau."},
     )
+
+
+async def _debate_not_waiting(request: Request, exc: DebateNotWaiting) -> JSONResponse:
+    """Gửi lời tranh luận khi không còn phiên chờ -> 409 Conflict (không phải sự cố)."""
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Phiên tranh luận đã khép lại (hết thời gian chờ hoặc đã kết thúc)."},
+    )
+
+
+async def _debate_invalid_reply(request: Request, exc: DebateInvalidReply) -> JSONResponse:
+    """Lời tranh luận sai định dạng -> 400. Nói rõ lý do vì đây là bug phía FE."""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 async def _global_fallback_error(request: Request, exc: Exception) -> JSONResponse:
     # LƯỚI VÉT: Lỗi không xác định (Bugs, Null, Out of Memory...) -> 500
     # Ghi log chi tiết lỗi để Dev sửa, nhưng chỉ báo user là "Lỗi hệ thống"
@@ -31,5 +44,7 @@ async def _global_fallback_error(request: Request, exc: Exception) -> JSONRespon
 def register_exception_handlers(app: FastAPI) -> None:
     """Đăng ký toàn bộ exception handler lên app. Gọi 1 lần khi khởi tạo FastAPI."""
     app.add_exception_handler(LLMServiceError, _llm_service_error) # -> 503
+    app.add_exception_handler(DebateNotWaiting, _debate_not_waiting)   # -> 409
+    app.add_exception_handler(DebateInvalidReply, _debate_invalid_reply) # -> 400
     #app.add_exception_handler(RagServiceError, _rag_service_error)   # -> 502
     app.add_exception_handler(Exception, _global_fallback_error) # -> 500
