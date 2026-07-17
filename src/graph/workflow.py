@@ -29,6 +29,15 @@ def _route_from_state(state: AgentState) -> str:
     """Đọc route do supervisor set -> tên node đích cho conditional edge."""
     return "prepare_context" if state.get("route") == Route.DEEP else "factual"
 
+def _route_after_prepare_context(state: AgentState) -> str:
+    """Sau Tool 1: user dán sẵn đoạn thơ/văn (need_retrieval=false) -> KHÔNG có truy
+    hồi nào để chấm, đi thẳng debate. Judge context sinh ra để kiểm soát chất lượng
+    TRUY HỒI (chunks có đúng tác phẩm được hỏi không); văn bản do user tự chọn thì
+    relevance=1.0 hiển nhiên, chạy judge chỉ tốn 1 lần gọi LLM và dễ false-reject."""
+    intent = state.get("intent")
+    need_retrieval = getattr(intent, "need_retrieval", True) if intent else True
+    return "debate" if not need_retrieval else "supervisor_judge_context"
+
 def _route_supervisor_judge_debate(state: AgentState) -> str:
     """Đọc verdict từ judge để quyết định cho retry hay đi tiếp."""
     verdict = state.get("judges", {}).get(Stage.CRITICS_DEBATE.value)
@@ -86,8 +95,12 @@ def build_graph(checkpointer=None, rag_service=None):
     g.add_edge("factual", "finalize")
     
     # Luồng Deep Analysis:
-    # Tool 1 -> Judge context -> (retry | debate)
-    g.add_edge("prepare_context", "supervisor_judge_context")
+    # Tool 1 -> (user dán sẵn: thẳng debate | có truy hồi: Judge context) -> (retry | debate)
+    g.add_conditional_edges(
+        "prepare_context",
+        _route_after_prepare_context,
+        {"supervisor_judge_context": "supervisor_judge_context", "debate": "debate"},
+    )
     g.add_conditional_edges(
         "supervisor_judge_context",
         _route_supervisor_judge_context,

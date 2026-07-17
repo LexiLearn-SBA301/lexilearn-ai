@@ -7,14 +7,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from state.agent_state import init_state
 from state.state_schema import Route, Stage
-from graph.workflow import build_graph, _route_from_state
+from graph.workflow import build_graph, _route_from_state, _route_after_prepare_context
 from agents.supervisor import _Decision
+from state.state_schema import IntentAnalysis
 
 
 def test_route_from_state():
     assert _route_from_state({"route": Route.DEEP}) == "prepare_context"
     assert _route_from_state({"route": Route.FACTUAL}) == "factual"
     assert _route_from_state({}) == "factual"  # mặc định khi chưa có route
+
+
+def test_route_after_prepare_context_bo_qua_judge_khi_user_dan_san():
+    """User dán sẵn đoạn thơ (need_retrieval=false) -> đi thẳng debate, KHÔNG qua judge
+    context: không có truy hồi nào để chấm. Còn lại (có truy hồi) mới vào judge."""
+    dan_san = IntentAnalysis(raw_query="q", retrieval_query="q", route=Route.DEEP, need_retrieval=False)
+    co_tra_cuu = IntentAnalysis(raw_query="q", retrieval_query="q", route=Route.DEEP, need_retrieval=True)
+    assert _route_after_prepare_context({"intent": dan_san}) == "debate"
+    assert _route_after_prepare_context({"intent": co_tra_cuu}) == "supervisor_judge_context"
+    assert _route_after_prepare_context({}) == "supervisor_judge_context"  # mặc định: cứ chấm
 
 
 class MockRAGService:
