@@ -14,10 +14,18 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
-from schemas.chat_schema import ChatRequest, ChatResponse, WorkflowResponse, SeedRequest
+from schemas.chat_schema import (
+    ChatRequest,
+    ChatResponse,
+    DebateOptinRequest,
+    DebateReplyRequest,
+    SeedRequest,
+    WorkflowResponse,
+)
 from schemas.suggestion_schema import SuggestionsResponse
 from providers.ollama_provider import FINE_TUNED_OLLAMA_LLM_MODEL, OLLAMA_BASE_LLM_MODEL
 from services.rag_service import RAGService
+from services.agent_service import debate_session
 from services.agent_service.workflow_service import WorkflowService
 from api.dependencies import get_workflow
 from state.agent_state import AgentState
@@ -116,6 +124,37 @@ async def chat_seed(req: SeedRequest, wf: WorkflowService = Depends(get_workflow
     """
     seeded = await wf.seed_history(req.thread_id, req.history)
     return {"thread_id": req.thread_id, "seeded": seeded}
+
+
+@router.post("/debate/optin")
+async def chat_debate_optin(req: DebateOptinRequest) -> dict:
+    """[Nội bộ, BE gọi] Người học bấm "Tranh luận cùng AI" TRONG LÚC luồng đang chạy.
+
+    Cửa sổ bấm = lúc Tool 1 chuẩn bị ngữ cảnh + judge chấm. Node debate đọc cờ này đúng
+    1 lần lúc vào; bấm muộn hơn thì cờ không ai đọc (FE cũng đã khoá nút khi nhận event
+    debate_lock) và sẽ được dọn ở finalize.
+    """
+    debate_session.mark_optin(req.thread_id)
+    return {"thread_id": req.thread_id, "optin": True}
+
+
+@router.post("/debate/reply")
+async def chat_debate_reply(req: DebateReplyRequest) -> dict:
+    """[Nội bộ, BE gọi] 1 lượt phát biểu của người học khi node debate đang pause.
+
+    Chạy trên request KHÁC với stream SSE đang mở (SSE không nhận được chiều lên): đẩy
+    tin vào queue của phiên -> node tỉnh dậy và chạy tiếp, event mới chảy ra CHÍNH cái
+    stream cũ. Không đụng gì tới stream ở đây.
+
+    message rỗng/None = Bỏ qua / Kết thúc phản biện. Lỗi (409/400) do exception_handlers
+    map từ DebateNotWaiting / DebateInvalidReply.
+    """
+    text = (req.message or "").strip()
+    reply = debate_session.HumanReply(
+        message=text, target_arg_id=req.target_arg_id, stance=req.stance,
+    ) if text else None
+    debate_session.submit(req.thread_id, reply)
+    return {"thread_id": req.thread_id, "accepted": True, "ended": reply is None}
 
 
 @router.get("/works/suggestions", response_model=SuggestionsResponse)

@@ -29,9 +29,13 @@ def _render_debate_data(debate_state: Any) -> str:
     for role, turn in debate_state.round1.items():
         role_name = CRITIC_DISPLAY.get(role, role.value)
         parts.append(f"**{role_name}**")
-        parts.append(f"Luận đề: {turn.thesis}")
+        # Bỏ nhãn khi rỗng thay vì in "Luận đề: " / "+ điểm: " cụt đuôi. Lượt của NGƯỜI HỌC
+        # không có luận đề lẫn lý lẽ (họ gõ thẳng luận điểm, không qua LLM) -> in nhãn rỗng
+        # thì Qwen-3B tưởng dữ liệu hỏng hoặc tưởng họ không có quan điểm.
+        if turn.thesis:
+            parts.append(f"Luận đề: {turn.thesis}")
         for arg in turn.arguments:
-            parts.append(f"  + {arg.point}: {arg.support}")
+            parts.append(f"  + {arg.point}: {arg.support}" if arg.support else f"  + {arg.point}")
         parts.append("")
         
     # Vòng 2: Phản biện
