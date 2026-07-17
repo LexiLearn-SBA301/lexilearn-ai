@@ -68,6 +68,22 @@ Và quyết định on_topic (câu hỏi có thuộc phạm vi hỗ trợ không
   khoa học, thời tiết, đời sống chung... (vd "java là ngôn ngữ lập trình đúng không").
 - on_topic=true khi là lời chào/xã giao HOẶC hỏi–đáp/phân tích về văn học.
 
+HỎI LẠI KHI CHƯA RÕ TÁC PHẨM — chỉ áp dụng cho yêu cầu PHÂN TÍCH/CẢM NHẬN/NGHỊ LUẬN sâu
+(route="deep_analysis"). Yêu cầu chung chung như "phân tích nhân vật", "nêu cảm nhận",
+"phân tích nghệ thuật" mà KHÔNG gắn với một tác phẩm cụ thể thì KHÔNG được đoán bừa một
+tác phẩm rồi phân tích — sẽ ra bài sai. Đặt needs_clarification=true khi CẢ HAI đúng:
+- Câu hỏi hiện tại KHÔNG tự nêu tên tác phẩm, VÀ
+- Lịch sử hội thoại KHÔNG chốt được DUY NHẤT một tác phẩm: hoặc chưa nhắc tác phẩm nào,
+  hoặc đã nhắc TỪ 2 TÁC PHẨM TRỞ LÊN mà không rõ đang muốn phân tích cái nào.
+Khi needs_clarification=true:
+- clarification_question = câu hỏi lại thân thiện, mời người dùng nêu rõ tác phẩm. Nếu lịch sử
+  có sẵn vài tác phẩm thì LIỆT KÊ chúng làm gợi ý. Ví dụ: "Bạn muốn mình phân tích nhân vật
+  trong tác phẩm nào ạ? Mình thấy chúng ta vừa nhắc tới Tấm Cám và Chiến thắng Mtao Mxay."
+- Các trường work_title/author/retrieval_query cứ để trống hoặc theo mặc định — sẽ không dùng.
+needs_clarification=false trong MỌI ca còn lại: câu đã nêu tác phẩm; HOẶC lịch sử chỉ xoay
+quanh ĐÚNG 1 tác phẩm (khi đó "phân tích nhân vật" hiểu là tác phẩm đó, cứ làm bình thường);
+HOẶC người dùng vừa TRẢ LỜI tên tác phẩm cho câu hỏi lại ở lượt trước (giờ đã rõ -> làm luôn).
+
 Nếu có "Lịch sử hội thoại gần đây": DÙNG nó để hiểu câu hỏi MỚI. Giải nghĩa đại từ/tham chiếu
 ("tác phẩm đó", "nhân vật ấy", "phân tích tiếp") thành tên tác phẩm/nhân vật/tác giả CỤ THỂ,
 và điền work_title/author cho đúng theo ngữ cảnh trước đó.
@@ -86,9 +102,11 @@ VÍ DỤ SAI: "Theo luật, đây là yêu cầu 'factual' để sửa bài, kh�
 VÍ DỤ ĐÚNG: "Bạn muốn phần thân bài dài và sâu hơn — mình sẽ tra lại tác phẩm để lấy thêm dẫn
 chứng rồi viết lại phần đó, các phần khác giữ nguyên."
 
-Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, on_topic, retrieval_query,
-refine_instruction, work_title, author, detected_entities, requested_dimensions, reasoning
-(nói ngắn gọn cho học sinh biết bạn sắp làm gì — theo đúng quy tắc ngôn ngữ ở trên).
+Trả về JSON đúng schema: route, confidence (0..1), need_retrieval, on_topic, needs_clarification,
+clarification_question, retrieval_query, refine_instruction, work_title, author, detected_entities,
+requested_dimensions, reasoning (nói ngắn gọn cho học sinh biết bạn sắp làm gì — theo đúng quy tắc
+ngôn ngữ ở trên; khi needs_clarification=true thì reasoning nói nhẹ nhàng rằng bạn cần biết rõ tác
+phẩm nào trước khi phân tích).
 """
 
 
@@ -98,6 +116,8 @@ class _Decision(BaseModel):
     confidence: float = 0.0
     need_retrieval: bool = True
     on_topic: bool = True
+    needs_clarification: bool = False          # yêu cầu phân tích sâu nhưng chưa chốt được tác phẩm -> hỏi lại
+    clarification_question: str = ""           # câu hỏi lại cho user khi needs_clarification=true
     retrieval_query: str = ""                  # câu tra cứu độc lập đã resolve tham chiếu từ lịch sử
     refine_instruction: Optional[str] = None   # mệnh lệnh sửa bài lượt trước; null nếu không phải ca sửa bài
     work_title: Optional[str] = None
@@ -177,9 +197,17 @@ def supervisor(state: AgentState) -> dict:
     # khi Gemini lỡ chọn deep_analysis: câu chê bài ("thân bài chưa sâu") nghe hệt yêu cầu phân
     # tích sâu, mà deep sẽ bỏ qua instruction rồi viết lại bài MỚI từ đầu, vứt bài cũ đi.
     refine_instruction = (d.refine_instruction or "").strip() or None
-    # Câu ngoài văn học -> luôn về factual để trả lời từ chối cố định (factual_node),
-    # kể cả khi Gemini lỡ định tuyến sang deep_analysis.
-    route = Route.FACTUAL if (not d.on_topic or refine_instruction) else d.route
+    # Yêu cầu phân tích sâu nhưng chưa chốt được tác phẩm -> hỏi lại thay vì đoán bừa. Chỉ nhận cờ
+    # khi Gemini định tuyến DEEP, on_topic, không phải ca sửa bài, và thực sự có câu hỏi lại: các
+    # điều kiện này giữ cờ đúng phạm vi "deep flow", tránh kích hoạt nhầm ở factual/off-topic/refine.
+    clarification_question = (d.clarification_question or "").strip()
+    needs_clarification = bool(
+        d.needs_clarification and d.route == Route.DEEP and d.on_topic
+        and not refine_instruction and clarification_question
+    )
+    # Câu ngoài văn học / cần hỏi lại tác phẩm -> về factual để trả lời tĩnh (factual_node),
+    # kể cả khi Gemini lỡ định tuyến sang deep_analysis. Ca sửa bài cũng về factual (Mode A).
+    route = Route.FACTUAL if (not d.on_topic or refine_instruction or needs_clarification) else d.route
     # retrieval_query đã resolve; rỗng (fallback/không có lịch sử) -> dùng chính câu hỏi gốc.
     retrieval_query = (d.retrieval_query or "").strip() or query
     intent = IntentAnalysis(
@@ -189,6 +217,8 @@ def supervisor(state: AgentState) -> dict:
         confidence=d.confidence,
         need_retrieval=d.need_retrieval,
         on_topic=d.on_topic,
+        needs_clarification=needs_clarification,
+        clarification_question=clarification_question,
         refine_instruction=refine_instruction,
         work_title=d.work_title,
         author=d.author,

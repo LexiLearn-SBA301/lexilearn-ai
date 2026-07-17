@@ -77,6 +77,51 @@ def test_refine_di_qua_mode_a_ke_ca_khi_gemini_chon_deep():
     assert rag.last_query_kwargs["retrieve"] is True   # vẫn retrieve để lấy dẫn chứng
 
 
+def test_deep_chua_ro_tac_pham_thi_hoi_lai_khong_chay_pipeline():
+    """Yêu cầu phân tích sâu nhưng chưa chốt được tác phẩm -> hỏi lại, KHÔNG chạy deep pipeline.
+
+    Đây là ca bug: "Phân tích nhân vật" khi lịch sử có nhiều tác phẩm -> trước đây đoán bừa 1
+    tác phẩm rồi chạy cả pipeline ra bài sai (judge accuracy=0). Ép _Decision route=DEEP +
+    needs_clarification -> supervisor ép về FACTUAL, factual_node trả thẳng câu hỏi lại (static),
+    không retrieve/không gọi model, không đụng debate/essay.
+    """
+    rag = MockRAGService()
+    cauhoi = "Bạn muốn mình phân tích tác phẩm nào ạ? Tấm Cám hay Chiến thắng Mtao Mxay?"
+    out = _run_with_decision(
+        _Decision(route=Route.DEEP, needs_clarification=True,
+                  clarification_question=cauhoi, reasoning="test"), rag=rag)
+
+    assert out["route"] == Route.FACTUAL              # ép route, không nghe theo DEEP
+    assert out.get("essay") is None                   # không chạy debate/write_essay
+    assert out["intent"].needs_clarification is True
+    assert out["final_ai_response"] == cauhoi          # trả thẳng câu hỏi lại supervisor soạn
+    assert rag.last_query_kwargs == {}                 # KHÔNG gọi rag.query -> không retrieve/LLM
+
+
+def test_deep_da_ro_tac_pham_khong_bi_ep_hoi_lai():
+    """_Decision deep bình thường (needs_clarification mặc định False) -> supervisor GIỮ route=DEEP.
+
+    Test ở tầng supervisor (không chạy cả pipeline) để không phụ thuộc Ollama: chỉ kiểm tra
+    quyết định route không bị cờ hỏi-lại kích hoạt nhầm khi Gemini không bật cờ.
+    """
+    from agents.supervisor import supervisor
+    with patch("agents.supervisor._classify", return_value=_Decision(route=Route.DEEP, reasoning="test")):
+        out = supervisor(init_state("phân tích nhân vật Tràng trong Vợ Nhặt", "t1", "r1"))
+    assert out["route"] == Route.DEEP
+    assert out["intent"].needs_clarification is False
+
+
+def test_clarification_chi_kich_hoat_khi_route_deep():
+    """Cờ needs_clarification chỉ nhận khi Gemini định tuyến DEEP. Nếu Gemini ra FACTUAL mà lỡ
+    bật needs_clarification thì supervisor BỎ QUA cờ (đúng phạm vi 'deep flow')."""
+    from agents.supervisor import supervisor
+    with patch("agents.supervisor._classify", return_value=_Decision(
+            route=Route.FACTUAL, needs_clarification=True,
+            clarification_question="tác phẩm nào?", reasoning="test")):
+        out = supervisor(init_state("Vợ Nhặt của ai?", "t1", "r1"))
+    assert out["intent"].needs_clarification is False
+
+
 def test_cau_hoi_thuong_khong_dinh_refine_instruction():
     """Câu hỏi bình thường -> refine_instruction=None, Mode A dùng SYSTEM_PROMPT như cũ."""
     rag = MockRAGService()

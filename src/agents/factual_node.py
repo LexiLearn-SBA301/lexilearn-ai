@@ -31,6 +31,19 @@ def factual_node(state: AgentState, rag_service: Optional[RAGService] = None) ->
             "events": emitter.milestones,
             "event_seq": emitter.seq,
         }
+    # Yêu cầu phân tích sâu nhưng supervisor chưa chốt được tác phẩm -> hỏi lại tác phẩm nào,
+    # KHÔNG retrieve/không gọi model. Đoán bừa 1 tác phẩm rồi chạy cả pipeline chỉ ra bài sai
+    # (judge chấm accuracy=0 ở cuối). Câu hỏi lại do supervisor (Gemini) soạn sẵn.
+    if getattr(intent, "needs_clarification", False):
+        question = getattr(intent, "clarification_question", "") or "Bạn muốn mình phân tích tác phẩm nào ạ?"
+        logger.info("Factual node: cần hỏi lại tác phẩm -> trả câu hỏi lại, bỏ qua retrieve/LLM.")
+        return {
+            "factual": FactualResult(answer=question, chunks_used=[], model="static"),
+            "current_stage": Stage.FACTUAL,
+            "current_node": "factual",
+            "events": emitter.milestones,
+            "event_seq": emitter.seq,
+        }
     # Supervisor quyết định có tra cứu không (chào hỏi/tán gẫu -> khỏi retrieve).
     need_retrieval = getattr(intent, "need_retrieval", True)
     # != None -> supervisor giao lệnh SỬA bài văn lượt trước: vẫn retrieve (cần ngữ liệu để lấy

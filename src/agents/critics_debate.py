@@ -552,8 +552,11 @@ async def _collect_human(thread_id: str, round_no: int, valid_arg_ids: set[str],
                          writer) -> list[HumanReply]:
     """PAUSE tại đây tới khi người học gửi đủ / bấm kết thúc / hết giờ im lặng.
 
-    Timeout tính theo LÚC IM LẶNG (nằm trong vòng lặp), không phải tổng thời gian: người
-    học đang gõ tới tin thứ 7 mà bị đá ra vì "quá 180s cả lượt" thì vô lý.
+       1. get() thấy queue rỗng → tạo một Future, để lại số điện thoại trong self._getters, rồi ngủ. Coroutine bị gỡ khỏi event loop
+      hoàn toàn, không tốn CPU.
+      2. put_nowait() đẩy item vào, rồi gọi lại theo số điện thoại đó (waiter.set_result(None)).
+      3. Event loop thấy Future xong → xếp coroutine kia vào hàng chạy lại → get() tỉnh dậy, loop lại, thấy queue không rỗng nữa →
+      get_nowait() lấy item ra.
     """
     p = debate_session.open_session(thread_id, round_no, valid_arg_ids)
 

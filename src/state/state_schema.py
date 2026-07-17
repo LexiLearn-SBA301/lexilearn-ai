@@ -146,6 +146,9 @@ class IntentAnalysis(BaseModel):
     confidence: float = 0.0
     need_retrieval: bool = True               # False khi chào hỏi/tán gẫu hoặc user đã dán sẵn văn bản -> khỏi tra cứu DB
     on_topic: bool = True                      # False khi câu hỏi NGOÀI văn học (toán/code/khoa học...) -> trả lời từ chối cố định
+    needs_clarification: bool = False         # True khi yêu cầu phân tích sâu nhưng CHƯA chốt được tác phẩm (câu không nêu
+                                              # + lịch sử không chỉ đúng 1 tác phẩm) -> hỏi lại thay vì đoán bừa rồi phân tích sai
+    clarification_question: str = ""          # câu hỏi lại thân thiện hiển thị cho user khi needs_clarification=True
     refine_instruction: Optional[str] = None  # != None khi user đòi SỬA bài lượt trước ("thân bài ngắn quá"): mệnh lệnh
                                               # supervisor giao cho Mode A thi hành. Bài cũ lấy từ `messages` (history)
     work_title: Optional[str] = None         # tác phẩm
