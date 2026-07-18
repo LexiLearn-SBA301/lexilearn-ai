@@ -21,10 +21,14 @@ def _make_mock_chunk(chunk_id="chunk_1"):
     mock_chunk.has_overlap = False
     mock_chunk.tags = []
     mock_chunk.section_title = "Title"
-    mock_chunk.ten_tac_pham = "Test Title"
-    mock_chunk.tac_gia = "Test Author"
-    mock_chunk.nam_sang_tac = 2024
+    mock_chunk.work_title = "Test Title"
+    mock_chunk.author_name = "Test Author"
+    mock_chunk.publish_year = 2024
     mock_chunk.is_biography = False
+    mock_chunk.author_period = "trung_dai"
+    mock_chunk.work_period = "trung_dai"
+    mock_chunk.genre = "tho_ca"
+    mock_chunk.sub_genre = "that_ngon"
     
     mock_chunk.chunk_category = "text_section"
     mock_chunk.section_slug = "test-slug"

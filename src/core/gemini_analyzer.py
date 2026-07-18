@@ -34,18 +34,18 @@ class GeminiAnalyzer:
         self.system_prompt = (
             "Bạn là chuyên gia phân tích văn bản sách giáo khoa Ngữ Văn. Nhiệm vụ của bạn là đọc các đoạn văn (chunk) và trích xuất Metadata.\n\n"
             "QUY TẮC PHÂN TÍCH:\n"
-            "1. ten_tac_pham: Tên tác phẩm / Đề bài học lớn chứa nội dung này.\n"
-            "   - Bạn được cung cấp 'structural_context' là ĐƯỜNG DẪN PHÂN CẤP của bài học trong sách (VD: 'PHẦN HAI > Khái quát văn học > I. Bối cảnh').\n"
-            "   - Hãy ƯU TIÊN lấy tên tác phẩm/bài học từ cấp cao nhất có ý nghĩa trong structural_context.\n"
-            "   - TUYỆT ĐỐI KHÔNG lấy tên các bài thơ/văn TRÍCH DẪN nhỏ nằm bên trong nội dung chunk để làm ten_tac_pham.\n"
-            "   - VD: structural_context = 'Khái quát văn học > I. Bối cảnh' và trong text có trích thơ 'Từ ấy' → ten_tac_pham = 'Khái quát văn học', KHÔNG ĐƯỢC đổi thành 'Từ ấy'.\n"
-            "2. tac_gia: Tên tác giả.\n"
-            "   - Nếu nội dung thuộc bài giảng kiến thức chung (Tổng kết, Luyện tập, Khái quát văn học, Tiếng Việt, Làm văn, Hướng dẫn đọc thêm...) → điền 'Bộ Giáo Dục và Đào Tạo'.\n"
-            "   - Nếu là tác phẩm văn học cụ thể → điền đúng tên tác giả.\n"
+            "1. work_title: Tên tác phẩm CHÍNH đang được học. Nếu là một văn bản trích dẫn nhỏ trong bài, hãy lấy tên bài học lớn chứa nó (nếu có trong structural_context).\n"
+            "   - Lưu ý: KHÔNG dùng các từ như 'Phần 1', 'Tiểu dẫn'. Hãy trích xuất chính xác tên tác phẩm (VD: Tỏ Lòng, Vợ Nhặt, Bình ngô đại cáo).\n"
+            "2. author_name: Tên tác giả của tác phẩm. NẾU phát hiện tác phẩm đó do ai viết thì điền chính xác tên tác giả (VD: Phạm Ngũ Lão, Kim Lân).\n"
+            "   - Nếu nội dung thuộc bài giảng kiến thức chung, sách giáo khoa tổng kết → 'Bộ Giáo Dục và Đào Tạo'.\n"
             "3. is_biography: Nội dung chunk có phải phần 'Tiểu dẫn' hoặc 'Giới thiệu tiểu sử tác giả' không? (True/False).\n"
-            "4. nam_sang_tac: Năm sáng tác của tác phẩm (nếu biết hoặc có thể suy ra từ nội dung/kiến thức nền). Trả về số nguyên (VD: 1948). Nếu không rõ, trả về null.\n\n"
+            "4. author_period: Thời đại của tác giả (dan_gian, trung_dai, hien_dai). Dựa vào năm sinh/thế kỷ để nhận diện.\n"
+            "5. work_period: Thời kỳ của tác phẩm (dan_gian, trung_dai, hien_dai). Dựa vào năm sáng tác/thế kỷ để nhận diện.\n"
+            "6. genre: Thể loại chính của tác phẩm (VD: tho_ca, truyen_ngan, tieu_thuyet, ky, kich, nghi_luan, van_hoc_dan_gian).\n"
+            "7. sub_genre: Thể loại con cụ thể (VD: that_ngon_tu_tuyet, that_ngon_bat_cu, luc_bat, truyen_ky, tui_but, the_cao...). Suy luận từ nội dung văn bản. Nếu không rõ, hãy để chuỗi rỗng \"\".\n"
+            "8. publish_year: Lấy chính xác từ \"Năm sáng tác\" hoặc từ khóa tương tự trong văn bản. Trả về số nguyên (VD: 1948). Nếu không có hoặc không rõ, trả về null.\n\n"
             "Input: JSON array [{'chunk_id': '...', 'text': '...', 'structural_context': '...'}, ...]\n"
-            "Output: JSON array [{'chunk_id': '...', 'ten_tac_pham': '...', 'tac_gia': '...', 'is_biography': true/false, 'nam_sang_tac': 1948 hoặc null}, ...].\n"
+            "Output: JSON array [{'chunk_id': '...', 'work_title': '...', 'author_name': '...', 'is_biography': true/false, 'author_period': '...', 'work_period': '...', 'genre': '...', 'sub_genre': '...', 'publish_year': 1948 hoặc null}, ...].\n"
             "CHỈ TRẢ VỀ JSON HỢP LỆ, không kèm theo text giải thích nào khác."
         )
 
@@ -56,16 +56,14 @@ class GeminiAnalyzer:
         Example output: "PHẦN HAI - LỊCH SỬ VĂN HỌC > Khái quát văn học Việt Nam > I. Bối cảnh"
         """
         parts = []
-        if chunk.parent_section:
-            parts.append(chunk.parent_section)
-        if chunk.section_title and chunk.section_title != chunk.parent_section:
+        if chunk.section_title:
             parts.append(chunk.section_title)
-        if chunk.subsection_title and chunk.subsection_title != chunk.section_title:
-            parts.append(chunk.subsection_title)
+        if chunk.section_slug and chunk.section_slug != chunk.section_title:
+            parts.append(chunk.section_slug)
         
-        # If we have nothing meaningful, fall back to title
+        # If we have nothing meaningful, fall back to work_title
         if not parts:
-            return chunk.title or ""
+            return chunk.work_title or ""
         
         return " > ".join(parts)
 
@@ -136,12 +134,15 @@ class GeminiAnalyzer:
                 for c in batch_chunks:
                     if c.chunk_id in data_dict:
                         info = data_dict[c.chunk_id]
-                        c.ten_tac_pham = info.get("ten_tac_pham")
-                        c.tac_gia = info.get("tac_gia")
-                        c.is_biography = bool(info.get("is_biography", False))
-                        # nam_sang_tac: store as attribute for IngestService to pick up
-                        raw_year = info.get("nam_sang_tac")
-                        c.nam_sang_tac = int(raw_year) if raw_year is not None else None
+                        c.work_title = info.get("work_title")
+                        c.author_name = info.get("author_name")
+                        c.author_period = info.get("author_period")
+                        c.work_period = info.get("work_period")
+                        c.genre = info.get("genre")
+                        c.sub_genre = info.get("sub_genre", "")
+                        # publish_year: store as attribute for IngestService to pick up
+                        raw_year = info.get("publish_year")
+                        c.publish_year = int(raw_year) if raw_year is not None else None
                         
             except Exception as e:
                 logger.error(f"Lỗi khi gọi Gemini Analyzer cho batch {i//batch_size + 1}: {e}")

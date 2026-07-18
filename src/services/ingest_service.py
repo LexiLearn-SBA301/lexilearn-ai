@@ -132,36 +132,6 @@ class IngestService:
         job = self.jobs_collection.find_one({"job_id": job_id}, {"_id": 0})
         return job
 
-    def _resolve_work_title(self, chunk_title: str, page_start: int, sections: list) -> str:
-        """
-        Traces the parent section chain in the DocumentSections to resolve the actual literary work name (Level 0).
-        """
-        matching_section = None
-        for sec in sections:
-            if sec.title == chunk_title and sec.page_start <= page_start <= sec.page_end:
-                matching_section = sec
-                break
-                
-        if not matching_section:
-            for sec in sections:
-                if sec.title == chunk_title:
-                    matching_section = sec
-                    break
-                    
-        if not matching_section:
-            return chunk_title or "Sách Giáo Khoa"
-            
-        current = matching_section
-        visited = set()
-        while current and current.level > 0 and current.title not in visited:
-            visited.add(current.title)
-            parent = next((s for s in reversed(sections) if s.title == current.parent_title), None)
-            if not parent:
-                break
-            current = parent
-            
-        return current.title if current else chunk_title or "Sách Giáo Khoa"
-
     def _clean_title_and_author(self, title: str) -> tuple[str, str]:
         if not title:
             return "", "Bộ Giáo Dục và Đào Tạo"
@@ -229,13 +199,13 @@ class IngestService:
                 
             works_col = self.db["works_metadata"]
             works_col.update_one(
-                {"ten_tac_pham": work_title.upper()},
+                {"work_title": work_title.upper()},
                 {
                     "$set": {
-                        "ten_tac_pham": work_title.upper(),
-                        "tac_gia": author,
-                        "lop": grade,
-                        "hoc_ki": semester,
+                        "work_title": work_title.upper(),
+                        "author_name": author,
+                        "grade": grade,
+                        "semester": semester,
                         "suggested_questions": questions,
                         "updated_at": datetime.now(timezone.utc)
                     }
@@ -325,9 +295,50 @@ class IngestService:
                     validated = validator.validate(chunks)
                     passed_chunks = [vc.chunk for vc in validated if vc.validation.passed]
 
+                    # Group by work_title directly (populated by StructureDetector Level 0 heading)
+                    for chunk in passed_chunks:
+                        chunk._group_title = chunk.work_title or "Sách Giáo Khoa"
+
                     # 4.5 Gemini Analyzer (Extract metadata)
                     if analyzer:
                         passed_chunks = analyzer.analyze(passed_chunks)
+
+                    # Aggregation pass: unify AI metadata per group to prevent per-chunk hallucinations
+                    group_meta = {}
+                    for chunk in passed_chunks:
+                        g = chunk._group_title
+                        if g not in group_meta:
+                            group_meta[g] = {
+                                "author_names": [], "author_periods": [],
+                                "work_periods": [], "genres": [], "sub_genres": [], "publish_years": []
+                            }
+                        gm = group_meta[g]
+                        if chunk.author_name and "Bộ Giáo Dục" not in chunk.author_name:
+                            gm["author_names"].append(chunk.author_name)
+                        if getattr(chunk, 'author_period', None): gm["author_periods"].append(chunk.author_period)
+                        if getattr(chunk, 'work_period', None): gm["work_periods"].append(chunk.work_period)
+                        if getattr(chunk, 'genre', None): gm["genres"].append(chunk.genre)
+                        if getattr(chunk, 'sub_genre', None): gm["sub_genres"].append(chunk.sub_genre)
+                        if getattr(chunk, 'publish_year', None): gm["publish_years"].append(chunk.publish_year)
+
+                    def most_frequent(lst):
+                        return max(set(lst), key=lst.count) if lst else None
+
+                    # Broadcast aggregated metadata back to all chunks
+                    for chunk in passed_chunks:
+                        g = chunk._group_title
+                        gm = group_meta[g]
+                        
+                        # Never let AI touch work_title! Trust StructureDetector's hierarchy.
+                        clean_title, resolved_author = self._clean_title_and_author(g)
+                        
+                        chunk.work_title = clean_title
+                        chunk.author_name = most_frequent(gm["author_names"]) or resolved_author
+                        chunk.author_period = most_frequent(gm["author_periods"])
+                        chunk.work_period = most_frequent(gm["work_periods"])
+                        chunk.genre = most_frequent(gm["genres"])
+                        chunk.sub_genre = most_frequent(gm["sub_genres"])
+                        chunk.publish_year = most_frequent(gm["publish_years"])
 
                     if not passed_chunks:
                         # Find the first few validation errors to report
@@ -362,7 +373,7 @@ class IngestService:
 
                     # First pass: Extract genre for each literary work
                     for chunk in passed_chunks:
-                        resolved_title = chunk.ten_tac_pham or "Sách Giáo Khoa"
+                        resolved_title = chunk.work_title or "Sách Giáo Khoa"
                         clean_title, _ = self._clean_title_and_author(resolved_title)
                         title_upper = clean_title.upper().strip()
                         
@@ -381,17 +392,17 @@ class IngestService:
                             chunk_index=idx,
                             total_chunks=total_chunks
                         )
-                        resolved_title = chunk.ten_tac_pham or "Sách Giáo Khoa"
+                        resolved_title = chunk.work_title or "Sách Giáo Khoa"
                         clean_title, resolved_author = self._clean_title_and_author(resolved_title)
 
                         # Prefer AI-extracted metadata if available
-                        if chunk.ten_tac_pham:
-                            final_title = chunk.ten_tac_pham
+                        if chunk.work_title:
+                            final_title = chunk.work_title
                             ai_metadata_count += 1
                         else:
                             final_title = clean_title
                             fallback_metadata_count += 1
-                        final_author = chunk.tac_gia if chunk.tac_gia else resolved_author
+                        final_author = chunk.author_name if chunk.author_name else resolved_author
 
                         title_upper = final_title.upper().strip()
                         if title_upper and title_upper not in self.excluded_titles:
@@ -406,21 +417,37 @@ class IngestService:
                             }
 
                         # Use Gemini-extracted year, or None if unavailable
-                        final_year = getattr(chunk, 'nam_sang_tac', None)
-                        final_genre = work_genres.get(title_upper, "Chưa rõ")
+                        final_year = getattr(chunk, 'publish_year', None)
+                        final_genre = getattr(chunk, 'genre', None) or work_genres.get(title_upper, "Chưa rõ")
+                        final_sub_genre = getattr(chunk, 'sub_genre', None) or ""
+                        final_author_period = getattr(chunk, 'author_period', None) or "trung_dai"
+                        final_work_period = getattr(chunk, 'work_period', None) or "trung_dai"
+
+                        def make_slug(s):
+                            if not s:
+                                return ""
+                            s = remove_vietnamese_accents(s).lower()
+                            s = re.sub(r'[^a-z0-9]+', '_', s)
+                            return s.strip('_')
 
                         metadata = ChunkMetadata(
-                            ten_tac_pham=final_title.upper(),
-                            tac_gia=final_author,
-                            lop=file_metadata["lop"],
-                            the_loai=final_genre,
-                            hoc_ki=file_metadata["hoc_ki"],
-                            nam_sang_tac=final_year,
-                            tags=chunk.tags,
-                            is_biography=chunk.is_biography,
-                            chunk_category=chunk.chunk_category,
+                            schema_version="literature_seed.v1",
+                            work_title=final_title.upper(),
+                            work_slug=make_slug(final_title),
+                            author_name=final_author,
+                            author_slug=make_slug(final_author),
+                            author_period=final_author_period,
+                            work_period=final_work_period,
+                            genre=final_genre,
+                            sub_genre=final_sub_genre,
+                            grade=file_metadata["lop"],
+                            semester=file_metadata["hoc_ki"],
+                            publish_year=final_year,
+                            chunk_category=chunk.chunk_category or "text_section",
                             section_slug=chunk.section_slug,
-                            section_title=chunk.section_title
+                            section_title=chunk.section_title,
+                            section_order=1,
+                            content_type=chunk.content_type.upper() if chunk.content_type else "MIXED"
                         )
                         search_text = remove_vietnamese_accents(chunk.content)
 

@@ -14,26 +14,33 @@ class SemanticChunk:
     Represents a semantically cohesive chunk of a document.
     """
     chunk_id: str
-    title: str
     content: str
     content_type: str
     page_start: int
     page_end: int
-    section_title: str
-    subsection_title: Optional[str]
-    parent_section: Optional[str]
-    tags: List[str]
-    token_count: int
-    char_count: int
-    has_overlap: bool
-    overlap_from_chunk: Optional[str]
-    # Metadata extracted by AI Analyzer
-    ten_tac_pham: Optional[str] = None
-    tac_gia: Optional[str] = None
-    is_biography: bool = False
-    nam_sang_tac: Optional[int] = None
+    
+    # Optional metadata fields (will be populated fully by new JSON sync later)
+    work_title: Optional[str] = None
+    work_slug: Optional[str] = None
+    author_name: Optional[str] = None
+    author_slug: Optional[str] = None
+    author_period: Optional[str] = None
+    work_period: Optional[str] = None
+    genre: Optional[str] = None
+    sub_genre: Optional[str] = None
+    grade: Optional[int] = None
+    semester: Optional[int] = None
+    publish_year: Optional[int] = None
     chunk_category: Optional[str] = None
     section_slug: Optional[str] = None
+    section_title: Optional[str] = None
+    section_order: Optional[int] = None
+
+    # Internal metrics
+    token_count: int = 0
+    char_count: int = 0
+    has_overlap: bool = False
+    overlap_from_chunk: Optional[str] = None
 
 class SemanticChunker:
     """
@@ -262,43 +269,43 @@ class SemanticChunker:
         """
         title_lower = title.lower()
         if "luyện tập" in title_lower or "bài tập" in title_lower:
-            return "exercise"
+            return "MIXED"
         if "ghi nhớ" in title_lower or "tổng kết" in title_lower or "tóm tắt" in title_lower:
-            return "summary"
+            return "PROSE"
             
         if "|" in content:
-            return "table"
+            return "MIXED"
             
         lines = [line.strip() for line in content.split("\n") if line.strip()]
         if not lines:
-            return "prose"
+            return "PROSE"
             
         # Check for list (bullet points or numbered list on at least 3 lines and >= 50% of lines)
         list_patterns = [r'^[-–—•+*]\s+', r'^\d+[\.\)]\s+', r'^[a-z][\.\)]\s+']
         list_count = sum(1 for l in lines if any(re.match(pat, l, re.IGNORECASE) for pat in list_patterns))
         if len(lines) >= 3 and list_count / len(lines) >= 0.5:
-            return "list"
+            return "MIXED"
 
         if len(lines) >= 3:
             avg_len = sum(len(l) for l in lines) / len(lines)
             if avg_len < 45:
-                return "poem"
+                return "POETRY"
                 
         # Check for dialogue (at least 2 lines and >= 30% start with dash/bullet, or regex matching conversation)
         dialogue_count = sum(1 for l in lines if l.startswith(("-", "–", "—")))
         if len(lines) >= 2 and dialogue_count / len(lines) >= 0.3:
-            return "dialogue"
+            return "PROSE"
             
         dialogue_pattern = r'(:?\s*["“][^"”]+["”]\s*(?:nói|hỏi|thưa|đáp|kêu|bảo|trả lời))|(?:(?:nói|hỏi|thưa|đáp|kêu|bảo|trả lời)\s*:\s*["“])'
         if re.search(dialogue_pattern, content, re.IGNORECASE):
-            return "dialogue"
+            return "PROSE"
             
         if any(kw in title_lower for kw in self.analysis_keywords):
-            return "analysis"
+            return "PROSE"
         if re.search(r'(phân tích|giá trị nghệ thuật|giá trị hiện thực|giá trị nhân đạo|nét đặc sắc)', content, re.IGNORECASE):
-            return "analysis"
+            return "PROSE"
             
-        return "prose"
+        return "PROSE"
 
     def _generate_tags(self, title: str, content: str) -> List[str]:
         """
@@ -369,24 +376,16 @@ class SemanticChunker:
                 slug_counters[section_slug] += 1
                 chunk_id = self._generate_chunk_id(section.title, slug_counters[section_slug])
                 content_type = self._detect_content_type(section.title, "")
-                tags = self._generate_tags(section.title, "")
+
                 
                 empty_chunk = SemanticChunk(
                     chunk_id=chunk_id,
-                    title=section.title,
                     content="",
                     content_type=content_type,
                     page_start=section.page_start,
                     page_end=section.page_end,
+                    work_title=current_work_title,
                     section_title=section_title,
-                    subsection_title=subsection_title,
-                    parent_section=parent_section,
-                    tags=tags,
-                    token_count=0,
-                    char_count=0,
-                    has_overlap=False,
-                    overlap_from_chunk=None,
-                    ten_tac_pham=current_work_title,
                     chunk_category=chunk_category
                 )
                 chunks.append(empty_chunk)
@@ -431,26 +430,22 @@ class SemanticChunker:
                 final_content = f"{overlap_text}\n\n{raw_content}" if overlap_text else raw_content
                 
                 content_type = current_text_format if current_text_format else self._detect_content_type(section.title, final_content)
-                tags = self._generate_tags(section.title, final_content)
+
                 token_count = self._estimate_token_count(final_content)
                 char_count = len(final_content)
                 
                 new_chunk = SemanticChunk(
                     chunk_id=chunk_id,
-                    title=section.title,
                     content=final_content,
                     content_type=content_type,
                     page_start=section.page_start,
                     page_end=section.page_end,
+                    work_title=section.work_title or section.title,
                     section_title=current_text_title if current_text_title else section_title,
-                    subsection_title=subsection_title,
-                    parent_section=parent_section,
-                    tags=tags,
                     token_count=token_count,
                     char_count=char_count,
                     has_overlap=has_overlap,
                     overlap_from_chunk=overlap_from_chunk,
-                    ten_tac_pham=current_work_title,
                     chunk_category=chunk_category,
                     section_slug=current_text_slug
                 )
@@ -471,8 +466,7 @@ class SemanticChunker:
                         _flush_current_group()
                         current_text_slug = section_match.group(1).strip()
                         current_text_title = section_match.group(2).strip()
-                        raw_format = section_match.group(3).strip().lower()
-                        current_text_format = "poem" if raw_format == "poetry" else ("prose" if raw_format == "mixed" else raw_format)
+                        current_text_format = section_match.group(3).strip().upper()
                         continue
                 
                 if self._should_split(current_group, p_text):

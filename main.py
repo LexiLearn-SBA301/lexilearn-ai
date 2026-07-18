@@ -186,9 +186,9 @@ if __name__ == "__main__":
         # Build filter dict
         filters = {}
         if args.lop:
-            filters["lop"] = args.lop
+            filters["grade"] = args.lop
         if args.work:
-            filters["ten_tac_pham"] = args.work
+            filters["work_title"] = args.work
             
         print("=" * 80)
         print(f"TRUY VẤN HỆ THỐNG RAG: {args.query}")
@@ -208,8 +208,8 @@ if __name__ == "__main__":
             print(f"\nTÀI LIỆU THAM KHẢO TRÍCH XUẤT ({len(result['sources'])} chunks):")
             for idx, src in enumerate(result["sources"]):
                 metadata = src.get("metadata", {})
-                title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
-                author = metadata.get("tac_gia", "Không rõ tác giả")
+                title = metadata.get("work_title", "Không rõ tác phẩm")
+                author = metadata.get("author_name", "Không rõ tác giả")
                 page = src.get("position", {}).get("page", "?")
                 score = src.get("rrf_score", 0.0)
                 print(f"\n[{idx + 1}] {title} - {author} (Trang {page}) | Điểm RRF: {score:.5f}")
