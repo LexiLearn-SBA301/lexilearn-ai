@@ -90,13 +90,13 @@ class TestMongoWriter:
 
         
         mock_collection.create_index.assert_any_call(
-            [("metadata.ten_tac_pham", 1)], name="index_metadata_ten_tac_pham"
+            [("metadata.work_title", 1)], name="index_metadata_work_title"
         )
         mock_collection.create_index.assert_any_call(
-            [("metadata.tac_gia", 1)], name="index_metadata_tac_gia"
+            [("metadata.author_name", 1)], name="index_metadata_author_name"
         )
         mock_collection.create_index.assert_any_call(
-            [("metadata.lop", 1)], name="index_metadata_lop"
+            [("metadata.grade", 1)], name="index_metadata_grade"
         )
         mock_collection.create_index.assert_any_call(
             [("source_doc_id", 1)], name="index_source_doc_id"
