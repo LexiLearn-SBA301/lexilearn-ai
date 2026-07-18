@@ -179,7 +179,7 @@ class TestRAGService:
         ]
 
         # Run
-        results = service.hybrid_search("Vợ Nhặt", filters={"lop": 12}, limit=2)
+        results = service.hybrid_search(query="Kim Lân", filters={"grade": 12}, limit=2)
 
         # Assertions
         assert len(results) == 2
@@ -191,8 +191,9 @@ class TestRAGService:
         
         # Verify filters were properly prefixed for metadata
         vector_call_filter = service._vector_search.call_args[0][1]
+        assert len(vector_call_filter) == 2
         assert vector_call_filter["is_active"] is True
-        assert vector_call_filter["metadata.lop"] == 12
+        assert vector_call_filter["metadata.grade"] == 12
 
     @patch("services.rag_service.connect_to_mongo")
     @patch("services.rag_service.Embedder")
@@ -206,7 +207,7 @@ class TestRAGService:
         mock_chunk = {
             "chunk_id": "c1",
             "content": "Đây là nội dung tác phẩm Vợ Nhặt.",
-            "metadata": {"ten_tac_pham": "Vợ Nhặt", "tac_gia": "Kim Lân"},
+            "metadata": {"work_title": "Vợ Nhặt", "tac_gia": "Kim Lân"},
             "position": {"page": 5}
         }
         service.hybrid_search = MagicMock(return_value=[mock_chunk])  # type: ignore[method-assign]
@@ -246,16 +247,16 @@ class TestRAGService:
 
         # Mock 2 queries in ground truth
         mock_json_load.return_value = [
-            {"query": "Câu 1", "ten_tac_pham": "Tây Tiến"},
-            {"query": "Câu 2", "ten_tac_pham": "Vợ Nhặt"}
+            {"query": "Câu 1", "work_title": "Tây Tiến"},
+            {"query": "Câu 2", "work_title": "Vợ Nhặt"}
         ]
 
         # Mock hybrid_search output
         # First query: returns Tây Tiến at rank 1 -> HIT (rank 1)
         # Second query: returns Lão Hạc and Vợ Nhặt (rank 2) -> HIT (rank 2)
         service.hybrid_search = MagicMock(side_effect=[  # type: ignore[method-assign]
-            [{"metadata": {"ten_tac_pham": "Tây Tiến"}}],
-            [{"metadata": {"ten_tac_pham": "Lão Hạc"}}, {"metadata": {"ten_tac_pham": "Vợ Nhặt"}}]
+            [{"metadata": {"work_title": "Tây Tiến"}}],
+            [{"metadata": {"work_title": "Lão Hạc"}}, {"metadata": {"work_title": "Vợ Nhặt"}}]
         ])
 
         eval_result = service.evaluate("dummy_path.json", limit=5)
