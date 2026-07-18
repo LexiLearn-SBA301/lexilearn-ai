@@ -446,7 +446,7 @@ class IngestService:
                             chunk_category=chunk.chunk_category or "text_section",
                             section_slug=chunk.section_slug,
                             section_title=chunk.section_title,
-                            section_order=1,
+                            section_order=chunk.section_order,
                             content_type=chunk.content_type.upper() if chunk.content_type else "MIXED"
                         )
                         search_text = remove_vietnamese_accents(chunk.content)

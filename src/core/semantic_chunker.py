@@ -398,6 +398,7 @@ class SemanticChunker:
             current_text_slug = None
             current_text_title = None
             current_text_format = None
+            current_text_order = None
             
             def _flush_current_group():
                 nonlocal current_group, section_chunks, slug_counters, chunks
@@ -447,7 +448,8 @@ class SemanticChunker:
                     has_overlap=has_overlap,
                     overlap_from_chunk=overlap_from_chunk,
                     chunk_category=chunk_category,
-                    section_slug=current_text_slug
+                    section_slug=current_text_slug,
+                    section_order=current_text_order
                 )
                 section_chunks.append(new_chunk)
                 chunks.append(new_chunk)
@@ -461,12 +463,13 @@ class SemanticChunker:
                 p_text = paragraph.strip()
                 
                 if chunk_category == "text_section":
-                    section_match = re.match(r'^(?:[#]*\s*)?section:\s*([a-zA-Z0-9\-]+)\s*\|\s*(.+?)\s*\|\s*(PROSE|POETRY|MIXED)', p_text, flags=re.IGNORECASE)
+                    section_match = re.match(r'^(?:[#]*\s*)?section:\s*([a-zA-Z0-9\-]+)\s*\|\s*(.+?)\s*\|\s*(PROSE|POETRY|MIXED)(?:\s*\|\s*(\d+))?', p_text, flags=re.IGNORECASE)
                     if section_match:
                         _flush_current_group()
                         current_text_slug = section_match.group(1).strip()
                         current_text_title = section_match.group(2).strip()
                         current_text_format = section_match.group(3).strip().upper()
+                        current_text_order = int(section_match.group(4).strip()) if section_match.group(4) else None
                         continue
                 
                 if self._should_split(current_group, p_text):
