@@ -44,7 +44,8 @@ def _run_with_decision(decision: _Decision, rag: "MockRAGService | None" = None)
     ainvoke: graph có node async (prepare_context / debate / write_essay) nên chạy
     bằng invoke() sync sẽ vỡ.
     """
-    with patch("agents.supervisor._classify", return_value=decision):
+    with patch("agents.supervisor._classify", return_value=decision), \
+         patch("graph.workflow.judge_node", return_value={"judges": {}}):
         app = build_graph(rag_service=rag or MockRAGService())  # Inject mock RAG
         return asyncio.run(app.ainvoke(init_state("câu hỏi test", "t1", "r1")))
 
