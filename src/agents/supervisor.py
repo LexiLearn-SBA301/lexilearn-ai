@@ -16,7 +16,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from providers.gemini_provider import gemini_provider
+from providers.openrouter_provider import GenConfig, openrouter_provider
 from state.agent_state import AgentState
 from state.state_schema import (
     CriticRole,
@@ -29,7 +29,7 @@ from state.state_schema import (
 
 logger = logging.getLogger("rag-service.graph.supervisor")
 
-SUPERVISOR_MODEL = os.getenv("GEMINI_SUPERVISOR_MODEL", "gemini-2.5-flash")
+SUPERVISOR_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
 
 _SYSTEM_PROMPT = """Bạn là Supervisor điều phối của hệ thống phân tích văn học.
 Nhiệm vụ: đọc câu hỏi của học sinh và phân loại thành 1 trong 2 route:
@@ -152,26 +152,24 @@ def _render_history(messages: list, max_assistant_chars: int = 500) -> str:
 
 
 def _classify(query: str, history_text: str = "") -> _Decision:
-    """Gọi Gemini phân loại route. Mọi sự cố -> fallback route=factual."""
-    client = gemini_provider.get_client()
+    """Gọi OpenRouter phân loại route. Mọi sự cố -> fallback route=factual."""
+    client = openrouter_provider.get_client()
     if client is None:
-        logger.warning("Thiếu GEMINI_API_KEY -> fallback route=factual.")
+        logger.warning("Thiếu OPENROUTER_API_KEY -> fallback route=factual.")
         return _Decision(route=Route.FACTUAL,
-                         reasoning="[fallback] chưa cấu hình GEMINI_API_KEY")
+                         reasoning="[fallback] chưa cấu hình OPENROUTER_API_KEY")
     if history_text:
         contents = f"Lịch sử hội thoại gần đây:\n{history_text}\n\n---\nCâu hỏi mới của người dùng: {query}"
     else:
         contents = query
     try:
-        from google.genai import types
         resp = client.models.generate_content(
             model=SUPERVISOR_MODEL,
             contents=contents,
-            config=types.GenerateContentConfig(
+            config=GenConfig(
                 system_instruction=_SYSTEM_PROMPT,
                 temperature=0.0,
-                response_mime_type="application/json",
-                response_schema=_Decision,  # SDK biên dịch thành JSON -> genai sẽ ép gemini điền các json này
+                response_schema=_Decision,  # provider gửi kèm json_schema + nhắc schema trong prompt
             ),
         )
         decision = resp.parsed
@@ -179,9 +177,9 @@ def _classify(query: str, history_text: str = "") -> _Decision:
             return decision
         if resp.text:
             return _Decision.model_validate_json(resp.text)
-        raise ValueError("Gemini trả về rỗng")
+        raise ValueError("OpenRouter trả về rỗng")
     except Exception as e:
-        logger.warning("Supervisor gọi Gemini lỗi (%s) -> fallback route=factual.", e)
+        logger.warning("Supervisor gọi OpenRouter lỗi (%s) -> fallback route=factual.", e)
         return _Decision(route=Route.FACTUAL,
                          reasoning="Hệ thống đang bận, tạm xử lý câu hỏi theo hướng mặc định.")
 

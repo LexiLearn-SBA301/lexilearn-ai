@@ -47,7 +47,7 @@ from dotenv import load_dotenv
 
 from agents.judge_schemas import JudgeOut
 from config.judge_prompts import get_judge_criteria
-from providers.gemini_provider import gemini_provider
+from providers.openrouter_provider import GenConfig, openrouter_provider
 from state.agent_state import AgentState
 from state.state_schema import (
     DebateState,
@@ -64,7 +64,7 @@ load_dotenv()
 
 logger = logging.getLogger("rag-service.graph.supervisor_judge")
 
-JUDGE_MODEL = os.getenv("GEMINI_SUPERVISOR_MODEL", "gemini-2.5-flash")
+JUDGE_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
 
 DEFAULT_RETRY_LIMIT = 1  # dùng khi state chưa set retry_limits cho stage này
 
@@ -188,20 +188,18 @@ def _aggregate_score(verdict: Verdict, scores: dict[str, float]) -> float:
 # =============================================================================
 
 def _judge(stage: Stage, content: str, *, client=None) -> JudgeOut:
-    """Gọi Gemini chấm `content` theo tiêu chí của `stage`. Mọi sự cố -> fallback pass."""
-    client = client or gemini_provider.get_client()
+    """Gọi OpenRouter chấm `content` theo tiêu chí của `stage`. Mọi sự cố -> fallback pass."""
+    client = client or openrouter_provider.get_client()
     if client is None:
-        logger.warning("Thiếu GEMINI_API_KEY -> fallback verdict=pass.")
-        return JudgeOut(verdict="pass", reasoning="[fallback] chưa cấu hình GEMINI_API_KEY")
+        logger.warning("Thiếu OPENROUTER_API_KEY -> fallback verdict=pass.")
+        return JudgeOut(verdict="pass", reasoning="[fallback] chưa cấu hình OPENROUTER_API_KEY")
     try:
-        from google.genai import types
         resp = client.models.generate_content(
             model=JUDGE_MODEL,
             contents=content,
-            config=types.GenerateContentConfig(
+            config=GenConfig(
                 system_instruction=get_judge_criteria(stage), # lấy prompt tiêu chí chấm
                 temperature=0.0,
-                response_mime_type="application/json",
                 response_schema=JudgeOut,
             ),
         )
@@ -210,9 +208,9 @@ def _judge(stage: Stage, content: str, *, client=None) -> JudgeOut:
             return decision
         if resp.text:
             return JudgeOut.model_validate_json(resp.text)
-        raise ValueError("Gemini trả về rỗng")
+        raise ValueError("OpenRouter trả về rỗng")
     except Exception as e:
-        logger.warning("Judge %s gọi Gemini lỗi (%s) -> fallback verdict=pass.", stage.value, e)
+        logger.warning("Judge %s gọi OpenRouter lỗi (%s) -> fallback verdict=pass.", stage.value, e)
         return JudgeOut(verdict="pass", reasoning="Hệ thống giám khảo đang bận, tạm bỏ qua bước duyệt lần này.")
 
 
