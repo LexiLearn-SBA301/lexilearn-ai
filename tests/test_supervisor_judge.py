@@ -91,9 +91,9 @@ def test_retry_downgrades_to_reject_when_limit_exhausted():
 
 
 def test_missing_client_falls_back_to_pass(monkeypatch):
-    # Giả lập thiếu GEMINI_API_KEY (không phụ thuộc .env thật của máy chạy test).
-    import providers.gemini_provider as gemini_provider_module
-    monkeypatch.setattr(gemini_provider_module.gemini_provider, "get_client", lambda: None)
+    # Giả lập thiếu OPENROUTER_API_KEY (không phụ thuộc .env thật của máy chạy test).
+    import providers.openrouter_provider as openrouter_provider_module
+    monkeypatch.setattr(openrouter_provider_module.openrouter_provider, "get_client", lambda: None)
 
     delta = judge_node(_base_state(), client=None)
     assert delta["judges"]["prepare_context"].verdict == Verdict.PASS
@@ -124,9 +124,9 @@ def test_missing_current_stage_raises_clear_error():
 def test_same_function_reusable_for_all_three_stages(monkeypatch):
     # judge_node là 1 hàm 1-tham-số, đăng ký thẳng được dưới nhiều tên node LangGraph
     # (vd g.add_node("judge_essay", judge_node)) mà không cần factory/closure nào.
-    import providers.gemini_provider as gemini_provider_module
+    import providers.openrouter_provider as openrouter_provider_module
     client = _FakeClient(JudgeOut(verdict="pass", reasoning="ok"))
-    monkeypatch.setattr(gemini_provider_module.gemini_provider, "get_client", lambda: client)
+    monkeypatch.setattr(openrouter_provider_module.openrouter_provider, "get_client", lambda: client)
 
     delta = judge_node({"current_stage": Stage.WRITE_ESSAY, "retry_counts": {}, "retry_limits": {}})
     assert delta["judges"]["write_essay"].verdict == Verdict.PASS
