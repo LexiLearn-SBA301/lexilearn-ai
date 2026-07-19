@@ -44,6 +44,27 @@ class SyncService:
         """
         self.writer = writer
         self.embedder = embedder
+        
+        # Load taxonomy for beautiful display names in meta overview
+        import os, json
+        config_path = os.path.join(os.path.dirname(__file__), "..", "config", "genre_taxonomy.json")
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                taxonomy = json.load(f)
+                self.genre_labels = {k: v["label"] for k, v in taxonomy.get("genres", {}).items()}
+                self.sub_genre_labels = taxonomy.get("sub_genre_labels", {})
+        except Exception as e:
+            logger.warning(f"Could not load genre_taxonomy.json: {e}")
+            self.genre_labels = {}
+            self.sub_genre_labels = {}
+            
+        self.period_labels = {
+            "dan_gian": "dân gian",
+            "trung_dai": "trung đại",
+            "can_dai": "cận đại",
+            "hien_dai": "hiện đại"
+        }
+        
         logger.info("SyncService initialized successfully.")
 
     # ── Public API ───────────────────────────────────────────────
@@ -282,8 +303,7 @@ class SyncService:
 
         return chunks
 
-    @staticmethod
-    def _build_meta_overview_text(payload: WorkSnapshot) -> str:
+    def _build_meta_overview_text(self, payload: WorkSnapshot) -> str:
         """
         Tự sinh text tổng quan từ work + author + tags.
         Giúp tác phẩm có thể search được ngay cả khi chưa có nội dung section.
@@ -293,11 +313,12 @@ class SyncService:
         author = payload.author.name
         pen_name = f" (bút danh: {payload.author.pen_name})" if payload.author.pen_name else ""
 
-        genre_display = payload.work.genre
+        genre_display = self.genre_labels.get(payload.work.genre, payload.work.genre)
         if payload.work.sub_genre:
-            genre_display += f" ({payload.work.sub_genre})"
+            sub = self.sub_genre_labels.get(payload.work.sub_genre, payload.work.sub_genre)
+            genre_display += f" ({sub})"
 
-        period = payload.work.period
+        period = self.period_labels.get(payload.work.period, payload.work.period)
         grade = payload.work.grade
         semester = payload.work.semester
 
