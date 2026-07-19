@@ -25,8 +25,8 @@ class ChunkMetadata(BaseModel):
     author_period: str = Field(..., description="Thời kỳ tác giả (dan_gian, trung_dai, hien_dai)")
     work_period: str = Field(..., description="Thời kỳ tác phẩm (dan_gian, trung_dai, hien_dai)")
 
-    genre: str = Field(..., description="Thể loại văn học (ví dụ: tho_ca)")
-    sub_genre: str = Field(..., description="Tiểu thể loại (ví dụ: that_ngon_tu_tuyet)")
+    genre: str = Field(..., description="Thể loại văn học dạng snake_case (ví dụ: tho_ca, truyen_ngan, su_thi)")
+    sub_genre: Optional[str] = Field(None, description="Tiểu thể loại dạng snake_case (ví dụ: that_ngon_tu_tuyet). Null nếu chưa xác định.")
 
     grade: int = Field(..., description="Lớp học (ví dụ: 12)")
     semester: int = Field(..., description="Học kì học tác phẩm này (ví dụ: 1)")

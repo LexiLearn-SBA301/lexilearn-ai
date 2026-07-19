@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import time
+import unicodedata
 from typing import List
 
 from core.semantic_chunker import SemanticChunk
@@ -17,20 +18,42 @@ logger = logging.getLogger("rag-service.gemini-analyzer")
 
 class GeminiAnalyzer:
     def __init__(self, model_name: str = "gemini-2.0-flash"):
+        # Load genre taxonomy ALWAYS (needed for local normalization even if API is missing)
+        taxonomy_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "genre_taxonomy.json")
+        taxonomy_path = os.path.normpath(taxonomy_path)
+        with open(taxonomy_path, "r", encoding="utf-8") as f:
+            self.taxonomy = json.load(f)
+        
+        # Build reverse alias lookup
+        self._genre_alias_map = {}
+        self._valid_genres = set()
+        self._valid_sub_genres = set()
+        for genre_slug, genre_info in self.taxonomy["genres"].items():
+            self._valid_genres.add(genre_slug)
+            for alias in genre_info.get("aliases", []):
+                self._genre_alias_map[unicodedata.normalize('NFC', alias.strip().lower())] = genre_slug
+            for sg in genre_info.get("sub_genres", []):
+                self._valid_sub_genres.add(sg)
+                
+        # Build valid genre list string for the prompt
+        genre_examples = ", ".join(f"'{g}'" for g in self._valid_genres)
+        sub_genre_examples = ", ".join(f"'{sg}'" for sg in list(self._valid_sub_genres)[:8])
+
         if not genai:
-            logger.warning("google-genai package is not installed. GeminiAnalyzer will do nothing.")
+            logger.warning("google-genai package is not installed. GeminiAnalyzer will not do AI extraction.")
             self.client = None
             return
             
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            logger.warning("GEMINI_API_KEY environment variable not found. GeminiAnalyzer will do nothing.")
+            logger.warning("GEMINI_API_KEY environment variable not found. GeminiAnalyzer will not do AI extraction.")
             self.client = None
             return
             
         self.client = genai.Client(api_key=api_key)
         self.model_name = os.getenv("GEMINI_ANALYZER_MODEL", model_name)
         
+
         self.system_prompt = (
             "Bạn là chuyên gia phân tích văn bản sách giáo khoa Ngữ Văn. Nhiệm vụ của bạn là đọc các đoạn văn (chunk) và trích xuất Metadata.\n\n"
             "QUY TẮC PHÂN TÍCH:\n"
@@ -39,15 +62,50 @@ class GeminiAnalyzer:
             "2. author_name: Tên tác giả của tác phẩm. NẾU phát hiện tác phẩm đó do ai viết thì điền chính xác tên tác giả (VD: Phạm Ngũ Lão, Kim Lân).\n"
             "   - Nếu nội dung thuộc bài giảng kiến thức chung, sách giáo khoa tổng kết → 'Bộ Giáo Dục và Đào Tạo'.\n"
             "3. is_biography: Nội dung chunk có phải phần 'Tiểu dẫn' hoặc 'Giới thiệu tiểu sử tác giả' không? (True/False).\n"
-            "4. author_period: Thời đại của tác giả (dan_gian, trung_dai, hien_dai). Dựa vào năm sinh/thế kỷ để nhận diện.\n"
-            "5. work_period: Thời kỳ của tác phẩm (dan_gian, trung_dai, hien_dai). Dựa vào năm sáng tác/thế kỷ để nhận diện.\n"
-            "6. genre: Thể loại chính của tác phẩm (VD: tho_ca, truyen_ngan, tieu_thuyet, ky, kich, nghi_luan, van_hoc_dan_gian).\n"
-            "7. sub_genre: Thể loại con cụ thể (VD: that_ngon_tu_tuyet, that_ngon_bat_cu, luc_bat, truyen_ky, tui_but, the_cao...). Suy luận từ nội dung văn bản. Nếu không rõ, hãy để chuỗi rỗng \"\".\n"
+            "4. author_period: Thời đại của tác giả (dan_gian, trung_dai, can_dai, hien_dai). Dựa vào năm sinh/thế kỷ để nhận diện.\n"
+            "5. work_period: Thời kỳ của tác phẩm (dan_gian, trung_dai, can_dai, hien_dai). Dựa vào năm sáng tác/thế kỷ để nhận diện.\n"
+            f"6. genre: Thể loại chính. CHỈ ĐƯỢC CHỌN MỘT TRONG CÁC GIÁ TRỊ SAU: [{genre_examples}]. Nếu chưa rõ thì để 'van_hoc'.\n"
+            f"7. sub_genre: Thể loại con cụ thể, dạng snake_case (VD: {sub_genre_examples}...). Nếu không rõ, hãy để là null.\n"
             "8. publish_year: Lấy chính xác từ \"Năm sáng tác\" hoặc từ khóa tương tự trong văn bản. Trả về số nguyên (VD: 1948). Nếu không có hoặc không rõ, trả về null.\n\n"
             "Input: JSON array [{'chunk_id': '...', 'text': '...', 'structural_context': '...'}, ...]\n"
             "Output: JSON array [{'chunk_id': '...', 'work_title': '...', 'author_name': '...', 'is_biography': true/false, 'author_period': '...', 'work_period': '...', 'genre': '...', 'sub_genre': '...', 'publish_year': 1948 hoặc null}, ...].\n"
             "CHỈ TRẢ VỀ JSON HỢP LỆ, không kèm theo text giải thích nào khác."
         )
+
+    def normalize_genre(self, raw_genre: str | None) -> str:
+        """Normalize a raw genre value from AI into a valid slug. Falls back to 'van_hoc'."""
+        if not raw_genre:
+            return "van_hoc"
+        key = unicodedata.normalize('NFC', raw_genre.strip().lower())
+        # Direct match (already a valid slug)
+        if key in self._valid_genres:
+            return key
+        # Alias lookup
+        if key in self._genre_alias_map:
+            return self._genre_alias_map[key]
+        # Try removing accents as last resort
+        stripped = self._strip_accents(key)
+        for alias_key, genre_slug in self._genre_alias_map.items():
+            if self._strip_accents(alias_key) == stripped:
+                return genre_slug
+        logger.warning(f"Genre '{raw_genre}' not found in taxonomy, falling back to 'van_hoc'")
+        return "van_hoc"
+    
+    def normalize_sub_genre(self, raw_sub_genre: str | None) -> str | None:
+        """Normalize a raw sub_genre value. Returns None if invalid or empty."""
+        if not raw_sub_genre:
+            return None
+        key = unicodedata.normalize('NFC', raw_sub_genre.strip().lower().replace(" ", "_"))
+        if key in self._valid_sub_genres:
+            return key
+        logger.warning(f"Sub-genre '{raw_sub_genre}' not found in taxonomy, setting to None")
+        return None
+    
+    @staticmethod
+    def _strip_accents(text: str) -> str:
+        """Remove Vietnamese diacritics for fallback comparison."""
+        nfkd = unicodedata.normalize('NFKD', text)
+        return "".join(c for c in nfkd if not unicodedata.combining(c)).replace('đ', 'd').replace('Đ', 'D')
 
     @staticmethod
     def _build_structural_context(chunk: SemanticChunk) -> str:
@@ -138,8 +196,8 @@ class GeminiAnalyzer:
                         c.author_name = info.get("author_name")
                         c.author_period = info.get("author_period")
                         c.work_period = info.get("work_period")
-                        c.genre = info.get("genre")
-                        c.sub_genre = info.get("sub_genre", "")
+                        c.genre = self.normalize_genre(info.get("genre"))
+                        c.sub_genre = self.normalize_sub_genre(info.get("sub_genre"))
                         # publish_year: store as attribute for IngestService to pick up
                         raw_year = info.get("publish_year")
                         c.publish_year = int(raw_year) if raw_year is not None else None

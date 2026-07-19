@@ -1,0 +1,172 @@
+{
+  "_description": "Bảng phân loại thể loại văn học chuẩn cho hệ thống RAG. Dùng để validate và normalize giá trị genre/sub_genre từ AI.",
+  
+  "genres": {
+    "tho_ca": {
+      "label": "Thơ ca",
+      "aliases": ["Thơ", "thơ", "tho", "tho_ca", "thơ ca", "Thơ ca", "THƠ CA", "poetry"],
+      "sub_genres": [
+        "that_ngon_tu_tuyet",
+        "that_ngon_bat_cu",
+        "luc_bat",
+        "song_that_luc_bat",
+        "tu_do",
+        "ngu_ngon",
+        "the_cao",
+        "phu",
+        "ca_dao",
+        "tho_that_ngon_tu_tuyet",
+        "tho_tu_tuyet",
+        "tho_nom_duong_luat",
+        "tho_duong_luat"
+      ]
+    },
+    "truyen_ngan": {
+      "label": "Truyện ngắn",
+      "aliases": ["Truyện ngắn", "truyện ngắn", "truyen_ngan", "TRUYỆN NGẮN", "short_story"],
+      "sub_genres": [
+        "truyen_ngan_hien_thuc",
+        "truyen_ngan_lang_man",
+        "truyen_ngan_chien_tranh"
+      ]
+    },
+    "tieu_thuyet": {
+      "label": "Tiểu thuyết",
+      "aliases": ["Tiểu thuyết", "tiểu thuyết", "tieu_thuyet", "TIỂU THUYẾT", "novel"],
+      "sub_genres": [
+        "tieu_thuyet_chuong_hoi",
+        "tieu_thuyet_hien_thuc",
+        "tieu_thuyet_lang_man"
+      ]
+    },
+    "truyen_dan_gian": {
+      "label": "Truyện dân gian",
+      "aliases": ["Truyện cổ tích", "truyện cổ tích", "truyen_co_tich", "Truyện dân gian", "truyện dân gian", "truyen_dan_gian", "Cổ tích", "van_hoc_dan_gian", "TRUYỆN DÂN GIAN", "folk_tale"],
+      "sub_genres": [
+        "truyen_co_tich",
+        "truyen_co_tich_than_ky",
+        "truyen_co_tich_sinh_hoat",
+        "truyen_ngu_ngon",
+        "truyen_cuoi",
+        "than_thoai",
+        "truyen_thuyet"
+      ]
+    },
+    "su_thi": {
+      "label": "Sử thi",
+      "aliases": ["Sử thi", "sử thi", "su_thi", "SỬ THI", "epic"],
+      "sub_genres": [
+        "su_thi_dan_gian",
+        "su_thi_anh_hung",
+        "su_thi_tay_nguyen"
+      ]
+    },
+    "truyen_tho": {
+      "label": "Truyện thơ",
+      "aliases": ["Truyện thơ", "truyện thơ", "truyen_tho", "Truyện thơ dân gian", "TRUYỆN THƠ"],
+      "sub_genres": [
+        "truyen_tho_dan_gian",
+        "truyen_tho_nom",
+        "truyen_tho"
+      ]
+    },
+    "ky": {
+      "label": "Ký",
+      "aliases": ["Ký", "ký", "ky", "KÝ", "memoir"],
+      "sub_genres": [
+        "tui_but",
+        "but_ky",
+        "phong_su",
+        "hoi_ky",
+        "nhat_ky",
+        "truyen_ky"
+      ]
+    },
+    "nghi_luan": {
+      "label": "Nghị luận",
+      "aliases": ["Nghị luận", "nghị luận", "nghi_luan", "NGHỊ LUẬN", "essay", "Luận văn"],
+      "sub_genres": [
+        "nghi_luan_van_hoc",
+        "nghi_luan_xa_hoi",
+        "chieu",
+        "cao",
+        "hich",
+        "bieu"
+      ]
+    },
+    "kich": {
+      "label": "Kịch",
+      "aliases": ["Kịch", "kịch", "kich", "KỊCH", "drama"],
+      "sub_genres": [
+        "bi_kich",
+        "hai_kich",
+        "chinh_kich"
+      ]
+    },
+    "van_hoc": {
+      "label": "Văn học (chung)",
+      "aliases": ["Chưa rõ", "chưa rõ", "van_hoc", "VĂN HỌC", "khác", "other", "unknown"],
+      "sub_genres": []
+    }
+  },
+
+  "sub_genre_labels": {
+    "that_ngon_tu_tuyet": "Thất ngôn tứ tuyệt",
+    "that_ngon_bat_cu": "Thất ngôn bát cú",
+    "luc_bat": "Lục bát",
+    "song_that_luc_bat": "Song thất lục bát",
+    "tu_do": "Thơ tự do",
+    "ngu_ngon": "Thơ ngụ ngôn",
+    "the_cao": "Thể cao",
+    "phu": "Phú",
+    "ca_dao": "Ca dao",
+    "tho_that_ngon_tu_tuyet": "Thất ngôn tứ tuyệt",
+    "tho_tu_tuyet": "Thơ tứ tuyệt",
+    "tho_nom_duong_luat": "Thơ Nôm Đường luật",
+    "tho_duong_luat": "Thơ Đường luật",
+
+    "truyen_ngan_hien_thuc": "Truyện ngắn hiện thực",
+    "truyen_ngan_lang_man": "Truyện ngắn lãng mạn",
+    "truyen_ngan_chien_tranh": "Truyện ngắn chiến tranh",
+
+    "tieu_thuyet_chuong_hoi": "Tiểu thuyết chương hồi",
+    "tieu_thuyet_hien_thuc": "Tiểu thuyết hiện thực",
+    "tieu_thuyet_lang_man": "Tiểu thuyết lãng mạn",
+
+    "truyen_co_tich": "Truyện cổ tích",
+    "truyen_co_tich_than_ky": "Truyện cổ tích thần kỳ",
+    "truyen_co_tich_sinh_hoat": "Truyện cổ tích sinh hoạt",
+    "truyen_ngu_ngon": "Truyện ngụ ngôn",
+    "truyen_cuoi": "Truyện cười",
+    "than_thoai": "Thần thoại",
+    "truyen_thuyet": "Truyền thuyết",
+
+    "su_thi_dan_gian": "Sử thi dân gian",
+    "su_thi_anh_hung": "Sử thi anh hùng",
+    "su_thi_tay_nguyen": "Sử thi Tây Nguyên",
+
+    "truyen_tho_dan_gian": "Truyện thơ dân gian",
+    "truyen_tho_nom": "Truyện thơ Nôm",
+    "truyen_tho": "Truyện thơ",
+
+    "tui_but": "Tùy bút",
+    "but_ky": "Bút ký",
+    "phong_su": "Phóng sự",
+    "hoi_ky": "Hồi ký",
+    "nhat_ky": "Nhật ký",
+    "truyen_ky": "Truyện ký",
+
+    "nghi_luan_van_hoc": "Nghị luận văn học",
+    "nghi_luan_xa_hoi": "Nghị luận xã hội",
+    "chieu": "Chiếu",
+    "cao": "Cáo",
+    "hich": "Hịch",
+    "bieu": "Biểu",
+
+    "bi_kich": "Bi kịch",
+    "hai_kich": "Hài kịch",
+    "chinh_kich": "Chính kịch"
+  },
+
+  "period_values": ["dan_gian", "trung_dai", "can_dai", "hien_dai"]
+}

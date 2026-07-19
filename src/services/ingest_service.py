@@ -241,9 +241,9 @@ class IngestService:
             # Initialize components once
             pdf_reader = PDFReader()
             docx_reader = DocxReader()
-            # corrector and analyzer disabled per user request
+            # corrector disabled per user request
             corrector = None
-            analyzer = None
+            analyzer = GeminiAnalyzer()
             detector = StructureDetector()
             chunker = SemanticChunker()
             validator = ChunkValidator()
@@ -379,7 +379,11 @@ class IngestService:
                         
                         match = re.search(r'Thể loại:\s*([^\n]+)', chunk.content, re.IGNORECASE)
                         if match and title_upper not in work_genres:
-                            work_genres[title_upper] = match.group(1).strip()
+                            raw_genre = match.group(1).strip()
+                            # Normalize Vietnamese genre text to slug via taxonomy
+                            if analyzer:
+                                raw_genre = analyzer.normalize_genre(raw_genre)
+                            work_genres[title_upper] = raw_genre
 
                     for idx, chunk in enumerate(passed_chunks):
                         # Generate embedding
@@ -418,10 +422,15 @@ class IngestService:
 
                         # Use Gemini-extracted year, or None if unavailable
                         final_year = getattr(chunk, 'publish_year', None)
-                        final_genre = getattr(chunk, 'genre', None) or work_genres.get(title_upper, "Chưa rõ")
-                        final_sub_genre = getattr(chunk, 'sub_genre', None) or ""
+                        final_genre = getattr(chunk, 'genre', None) or work_genres.get(title_upper, "van_hoc")
+                        final_sub_genre = getattr(chunk, 'sub_genre', None)
                         final_author_period = getattr(chunk, 'author_period', None) or "trung_dai"
                         final_work_period = getattr(chunk, 'work_period', None) or "trung_dai"
+
+                        # Safety net: normalize genre/sub_genre to snake_case slug via taxonomy
+                        if analyzer:
+                            final_genre = analyzer.normalize_genre(final_genre)
+                            final_sub_genre = analyzer.normalize_sub_genre(final_sub_genre)
 
                         def make_slug(s):
                             if not s:
@@ -444,7 +453,7 @@ class IngestService:
                             semester=file_metadata["hoc_ki"],
                             publish_year=final_year,
                             chunk_category=chunk.chunk_category or "text_section",
-                            section_slug=chunk.section_slug,
+                            section_slug=make_slug(chunk.section_slug) if chunk.section_slug else None,
                             section_title=chunk.section_title,
                             section_order=chunk.section_order,
                             content_type=chunk.content_type.upper() if chunk.content_type else "MIXED"
