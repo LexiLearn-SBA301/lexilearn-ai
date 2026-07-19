@@ -20,13 +20,18 @@ def _make_dummy_chunk(chunk_id="vo-nhat_p012_c001", source_doc_id="vo-nhat_12"):
         content_type="prose",
         position=ChunkPosition(page=12, chunk_index=1, total_chunks=18),
         metadata=ChunkMetadata(
-            ten_tac_pham="Vợ Nhặt",
-            tac_gia="Kim Lân",
-            lop=12,
-            the_loai="truyen_ngan",
-            hoc_ki=1,
-            nam_sang_tac=1962,
-            tags=["nhan_vat_trang"]
+            work_title="Vợ Nhặt",
+            work_slug="vo_nhat",
+            author_name="Kim Lân",
+            author_slug="kim_lan",
+            author_period="hien_dai",
+            work_period="hien_dai",
+            genre="truyen_ngan",
+            sub_genre="truyen_ngan",
+            grade=12,
+            semester=1,
+            chunk_category="text_section",
+            content_type="PROSE"
         ),
         token_count=312,
         char_count=687,
@@ -85,13 +90,13 @@ class TestMongoWriter:
 
         
         mock_collection.create_index.assert_any_call(
-            [("metadata.ten_tac_pham", 1)], name="index_metadata_ten_tac_pham"
+            [("metadata.work_title", 1)], name="index_metadata_work_title"
         )
         mock_collection.create_index.assert_any_call(
-            [("metadata.tac_gia", 1)], name="index_metadata_tac_gia"
+            [("metadata.author_name", 1)], name="index_metadata_author_name"
         )
         mock_collection.create_index.assert_any_call(
-            [("metadata.lop", 1)], name="index_metadata_lop"
+            [("metadata.grade", 1)], name="index_metadata_grade"
         )
         mock_collection.create_index.assert_any_call(
             [("source_doc_id", 1)], name="index_source_doc_id"

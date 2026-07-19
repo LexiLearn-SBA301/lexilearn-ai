@@ -89,9 +89,9 @@ class MongoWriter:
 
         # 2. Metadata & query filtering indexes
         metadata_fields = [
-            ("metadata.ten_tac_pham", 1),
-            ("metadata.tac_gia", 1),
-            ("metadata.lop", 1),
+            ("metadata.work_title", 1),
+            ("metadata.author_name", 1),
+            ("metadata.grade", 1),
             ("source_doc_id", 1),
             ("is_active", 1)
         ]

@@ -166,8 +166,8 @@ def get_work_suggestions(
     try:
         res = rag_service.get_suggested_questions(work_title)
         return SuggestionsResponse(
-            ten_tac_pham=res["ten_tac_pham"],
-            tac_gia=res["tac_gia"],
+            work_title=res["work_title"],
+            author_name=res["author_name"],
             suggested_questions=res["suggested_questions"]
         )
     except ValueError as ve:

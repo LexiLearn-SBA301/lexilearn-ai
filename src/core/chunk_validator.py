@@ -36,7 +36,7 @@ class ChunkValidator:
         self.min_token_limit = min_token_limit
         self.max_token_limit = max_token_limit
         self.duplicate_threshold = duplicate_threshold
-        self.valid_content_types = {"prose", "poem", "dialogue", "exercise", "table", "analysis", "summary", "list"}
+        self.valid_content_types = {"PROSE", "POETRY", "MIXED"}
 
     def validate_chunk(self, chunk: SemanticChunk, all_chunks: List[SemanticChunk]) -> ValidatedChunk:
         """
@@ -71,18 +71,14 @@ class ChunkValidator:
             errors.append("Invalid page range: page_start > page_end")
             
         # Rule 7: Missing title check (Warning)
-        if not chunk.title or not chunk.title.strip():
+        if not chunk.work_title or not chunk.work_title.strip():
             warnings.append("Missing title")
             
         # Rule 8: Missing section_title check (Warning)
         if not chunk.section_title or not chunk.section_title.strip():
             warnings.append("Missing section title")
             
-        # Rule 9: Missing tags check (Warning)
-        if not chunk.tags or len(chunk.tags) == 0:
-            warnings.append("Missing tags")
-            
-        # Rule 10: Content type check (Error)
+        # Rule 9: Content type check (Error)
         if chunk.content_type not in self.valid_content_types:
             errors.append(f"Invalid content type: {chunk.content_type}")
             
@@ -189,12 +185,9 @@ class ChunkValidator:
                 score -= 10.0
             elif warning == "Missing section title":
                 score -= 10.0
-            elif warning == "Missing tags":
-                score -= 10.0
-                
         # Minor deduction for missing optional metadata only if chunk is otherwise valid
         if passed:
-            if not chunk.subsection_title or not chunk.subsection_title.strip():
+            if not chunk.section_slug or not chunk.section_slug.strip():
                 score -= 5.0
             
         return float(max(0.0, min(100.0, score)))

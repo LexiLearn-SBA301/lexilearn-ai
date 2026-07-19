@@ -101,7 +101,7 @@ def _render_context(state: AgentState) -> str:
 
     works: dict[str, int] = {}
     for c in ctx.chunks:
-        name = c.metadata.get("ten_tac_pham") or "(không rõ)"
+        name = c.metadata.get("work_title") or "(không rõ)"
         works[name] = works.get(name, 0) + 1
     works_line = ", ".join(f"{w} ({n} đoạn)" for w, n in works.items()) or "(không có đoạn trích nào)"
 

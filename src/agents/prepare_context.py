@@ -118,9 +118,9 @@ async def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
         query = raw_query
         meta: dict = {}
         if intent and getattr(intent, "work_title", None):
-            meta["ten_tac_pham"] = intent.work_title
+            meta["work_title"] = intent.work_title
         if intent and getattr(intent, "author", None):
-            meta["tac_gia"] = intent.author
+            meta["author_name"] = intent.author
         chunks = [SourceChunk(chunk_id="user-input", text=raw_query, metadata=meta)]
         emitter.status("prepare_context", "Phân tích trực tiếp văn bản bạn cung cấp (không tra cứu thư viện).")
     else:
@@ -132,14 +132,14 @@ async def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
         filters = state.get("filters", {}) or {}
         if intent:
             if intent.work_title:
-                filters["ten_tac_pham"] = _ci_match(intent.work_title)   # khớp bất kể hoa/thường
+                filters["work_title"] = _ci_match(intent.work_title)   # khớp bất kể hoa/thường
             if intent.author:
-                filters["tac_gia"] = _ci_match(intent.author)
+                filters["author_name"] = _ci_match(intent.author)
 
         # Retrieve chunks
         raw_chunks = await asyncio.to_thread(
             rag_service.hybrid_search, query, filters=filters, limit=_DEEP_RETRIEVAL_LIMIT)
-        # Metadata trong DB có thể BẨN (ten_tac_pham sai nhãn) -> filter exact-match trượt hết.
+        # Metadata trong DB có thể BẨN (work_title sai nhãn) -> filter exact-match trượt hết.
         # Nếu rỗng mà có filter -> thử lại KHÔNG filter để vector+keyword tự tìm theo nội dung.
         if not raw_chunks and filters:
             logger.info("prepare_context: 0 chunk với filter %s -> thử lại KHÔNG filter.", filters)
@@ -147,7 +147,7 @@ async def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
                 rag_service.hybrid_search, query, filters=None, limit=_DEEP_RETRIEVAL_LIMIT)
         chunks = _dedupe_chunks([SourceChunk.model_validate(c) for c in raw_chunks])
 
-        works = sorted({c.metadata.get("ten_tac_pham") for c in chunks if c.metadata.get("ten_tac_pham")})
+        works = sorted({c.metadata.get("work_title") for c in chunks if c.metadata.get("work_title")})
         emitter.retrieval(
             "prepare_context",
             f"Đã truy hồi {len(chunks)} đoạn trích" + (f" từ: {', '.join(works)}" if works else "."),
@@ -175,8 +175,8 @@ async def prepare_context(state: AgentState, rag_service: RAGService) -> dict:
     # Format chunks text
     chunks_text_parts = []
     for idx, c in enumerate(chunks):
-        title = c.metadata.get("ten_tac_pham", "Không rõ")
-        author = c.metadata.get("tac_gia", "Không rõ")
+        title = c.metadata.get("work_title", "Không rõ")
+        author = c.metadata.get("author_name", "Không rõ")
         chunks_text_parts.append(f"--- Chunk {idx+1} (Tác phẩm: {title}, Tác giả: {author}) ---\n{c.text}")
     chunks_text = "\n\n".join(chunks_text_parts)
     
