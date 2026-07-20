@@ -266,7 +266,7 @@ class RAGService:
                 )
             else:
                 system_prompt = SYSTEM_PROMPT
-                user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
+                user_prompt = f"Thông tin tham khảo:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
 
         try:
             if model_name:
