@@ -46,7 +46,7 @@ class SectionData(BaseModel):
     title: str
     content: str
     content_type: str
-    word_count: int
+    word_count: Optional[int] = None
 
 
 class CommentaryData(BaseModel):
