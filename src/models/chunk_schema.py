@@ -16,6 +16,10 @@ class ChunkMetadata(BaseModel):
     Thông tin siêu dữ liệu (metadata) của tác phẩm văn học.
     """
     schema_version: str = Field("literature_seed.v1", description="Phiên bản schema")
+    source: Optional[str] = Field(None, description="Nguồn dữ liệu: 'docx_ingest' hoặc 'be_sync'")
+    work_id: Optional[str] = Field(None, description="UUID tác phẩm từ BE Postgres")
+    author_id: Optional[str] = Field(None, description="UUID tác giả từ BE Postgres")
+    section_id: Optional[str] = Field(None, description="UUID section từ BE Postgres")
 
     work_title: str = Field(..., description="Tên tác phẩm (ví dụ: Tỏ Lòng)")
     work_slug: str = Field(..., description="Slug của tên tác phẩm")

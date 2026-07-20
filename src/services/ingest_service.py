@@ -441,6 +441,7 @@ class IngestService:
 
                         metadata = ChunkMetadata(
                             schema_version="literature_seed.v1",
+                            source="docx_ingest",
                             work_title=final_title.upper(),
                             work_slug=make_slug(final_title),
                             author_name=final_author,
