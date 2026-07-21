@@ -83,6 +83,9 @@ class SyncService:
         3. Batch embed
         4. Upsert into Mongo
         """
+        # Convert slugs to snake_case
+        payload.work.slug = payload.work.slug.replace("-", "_")
+        payload.author_ref.slug = payload.author_ref.slug.replace("-", "_")
         work_slug = payload.work.slug
 
         # 1. Deactivate old chunks (cả docx_ingest lẫn be_sync)
@@ -116,6 +119,7 @@ class SyncService:
 
     def delete_work(self, work_slug: str) -> Dict[str, Any]:
         """Soft delete a work's chunks (mark is_active = false)."""
+        work_slug = work_slug.replace("-", "_")
         chunks_deactivated = self.writer.deactivate_by_work_slug(work_slug)
         logger.info(f"Deactivated {chunks_deactivated} chunks for work '{work_slug}'")
 
@@ -130,6 +134,8 @@ class SyncService:
         """
         Process the sync payload for an author.
         """
+        # Convert slug to snake_case
+        payload.author.slug = payload.author.slug.replace("-", "_")
         author_slug = payload.author.slug
 
         chunks_deactivated = self.writer.deactivate_by_author_slug(author_slug)
@@ -206,6 +212,7 @@ class SyncService:
         }
 
     def delete_author(self, author_slug: str) -> Dict[str, Any]:
+        author_slug = author_slug.replace("-", "_")
         chunks_deactivated = self.writer.deactivate_by_author_slug(author_slug)
         logger.info(f"Deactivated {chunks_deactivated} chunks for author '{author_slug}'")
 
