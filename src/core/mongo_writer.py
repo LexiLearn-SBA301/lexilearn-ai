@@ -225,6 +225,23 @@ class MongoWriter:
         return result.modified_count
 
     @retry_on_transient_error()
+    def deactivate_by_author_slug(self, author_slug: str) -> int:
+        """
+        Soft deletes only author_bio chunks by setting is_active = False.
+        Does NOT touch work chunks that reference the same author_slug.
+        """
+        result = self.collection.update_many(
+            {
+                "metadata.author_slug": author_slug,
+                "metadata.chunk_category": "author_bio",
+                "is_active": True,
+            },
+            {"$set": {"is_active": False}}
+        )
+        logger.info(f"Deactivated {result.modified_count} author_bio chunks for author_slug '{author_slug}'.")
+        return result.modified_count
+
+    @retry_on_transient_error()
     def document_exists(self, source_doc_id: str) -> bool:
         """
         Check if any active chunks exist for the given source_doc_id.
