@@ -17,7 +17,13 @@ from typing import List, Dict, Any, Optional
 from core.embedder import Embedder
 from core.mongo_writer import MongoWriter
 from models.chunk_schema import ChunkSchema, ChunkPosition, ChunkMetadata
-from schemas.sync_schema import WorkSnapshot, EXPECTED_SNAPSHOT_SCHEMA, SOURCE_BE_SYNC
+from schemas.sync_schema import (
+    WorkSnapshot,
+    AuthorSnapshot,
+    EXPECTED_SNAPSHOT_SCHEMA,
+    EXPECTED_AUTHOR_SCHEMA,
+    SOURCE_BE_SYNC,
+)
 from services.rag_service import remove_vietnamese_accents
 
 logger = logging.getLogger("rag-service.services.sync-service")
@@ -120,6 +126,96 @@ class SyncService:
             "chunks_deactivated": chunks_deactivated,
         }
 
+    def sync_author(self, payload: AuthorSnapshot) -> Dict[str, Any]:
+        """
+        Process the sync payload for an author.
+        """
+        author_slug = payload.author.slug
+
+        chunks_deactivated = self.writer.deactivate_by_author_slug(author_slug)
+        logger.info(f"Deactivated {chunks_deactivated} old chunks for author '{author_slug}'")
+
+        if not payload.author.bio:
+            return {
+                "success": True,
+                "author_slug": author_slug,
+                "chunks_upserted": 0,
+                "chunks_deactivated": chunks_deactivated,
+            }
+
+        # Build chunk
+        bio_parts = []
+        pen_name_str = f" (Bút danh: {payload.author.pen_name})" if payload.author.pen_name else ""
+        life_span = ""
+        if payload.author.birth_year and payload.author.death_year:
+            life_span = f", sinh năm {payload.author.birth_year}, mất năm {payload.author.death_year}"
+        elif payload.author.birth_year:
+            life_span = f", sinh năm {payload.author.birth_year}"
+
+        period_label = self.period_labels.get(payload.author.period, payload.author.period)
+        bio_parts.append(f"{payload.author.name}{pen_name_str}{life_span} thuộc giai đoạn văn học {period_label}.")
+        bio_parts.append(payload.author.bio)
+
+        bio_text = " ".join(bio_parts)
+        search_text = remove_vietnamese_accents(bio_text)
+        chunk_id = f"{author_slug}__author_bio__001"
+
+        metadata = ChunkMetadata(
+            schema_version="literature_seed.v1",
+            source=SOURCE_BE_SYNC,
+            author_id=payload.author.id,
+            author_name=payload.author.name,
+            author_slug=author_slug,
+            author_period=payload.author.period,
+            chunk_category="author_bio",
+            content_type=DEFAULT_CONTENT_TYPE,
+        )
+
+        position = ChunkPosition(page=1, chunk_index=0, total_chunks=1)
+
+        char_count = len(bio_text)
+        token_count = char_count // CHARS_PER_TOKEN
+
+        chunk_doc = ChunkSchema(
+            chunk_id=chunk_id,
+            source_doc_id=f"{SOURCE_DOC_PREFIX}:{author_slug}_bio",
+            content=bio_text,
+            content_type=DEFAULT_CONTENT_TYPE,
+            position=position,
+            metadata=metadata,
+            token_count=token_count,
+            char_count=char_count,
+            has_overlap=False,
+            search_text=search_text,
+            model_version=self.embedder.model_name,
+            is_active=True,
+            embedding=[],
+        )
+
+        embeddings = self.embedder.embed_documents([bio_text])
+        chunk_doc.embedding = embeddings[0]
+
+        self.writer.upsert_chunk(chunk_doc)
+        logger.info(f"Successfully upserted 1 bio chunk for author '{author_slug}'")
+
+        return {
+            "success": True,
+            "author_slug": author_slug,
+            "chunks_upserted": 1,
+            "chunks_deactivated": chunks_deactivated,
+        }
+
+    def delete_author(self, author_slug: str) -> Dict[str, Any]:
+        chunks_deactivated = self.writer.deactivate_by_author_slug(author_slug)
+        logger.info(f"Deactivated {chunks_deactivated} chunks for author '{author_slug}'")
+
+        return {
+            "success": True,
+            "author_slug": author_slug,
+            "chunks_upserted": 0,
+            "chunks_deactivated": chunks_deactivated,
+        }
+
     # ── Chunk Building ───────────────────────────────────────────
 
     def _build_all_chunks(self, payload: WorkSnapshot):
@@ -163,10 +259,9 @@ class SyncService:
                     work_id=payload.work.id,
                     work_title=payload.work.title.upper(),
                     work_slug=work_slug,
-                    author_id=payload.author.id,
-                    author_name=payload.author.name,
-                    author_slug=payload.author.slug,
-                    author_period=payload.author.period,
+                    author_id=payload.author_ref.id,
+                    author_name=payload.author_ref.name,
+                    author_slug=payload.author_ref.slug,
                     work_period=payload.work.period,
                     genre=payload.work.genre,
                     sub_genre=payload.work.sub_genre,
@@ -212,11 +307,7 @@ class SyncService:
         # ── 2.1 Meta Overview (luôn tạo) ────────────────────────
         _add(self._build_meta_overview_text(payload), category="meta_overview")
 
-        # ── 2.2 Author Bio ──────────────────────────────────────
-        if payload.author.bio:
-            _add(payload.author.bio, category="author_bio")
-
-        # ── 2.3 Work Values ─────────────────────────────────────
+        # ── 2.2 Work Values ─────────────────────────────────────
         if payload.work.summary:
             _add(payload.work.summary, category="summary")
         if payload.work.historical_context:
@@ -233,7 +324,7 @@ class SyncService:
                 quote_text += f"\n— {payload.work.quote_attribution}"
             _add(quote_text, category="famous_quote")
 
-        # ── 2.4 Sections ────────────────────────────────────────
+        # ── 2.3 Sections ────────────────────────────────────────
         for sec in payload.sections:
             sec_slug = self._make_slug(sec.title) or f"section_{sec.number}"
             _add(
@@ -246,7 +337,7 @@ class SyncService:
                 content_type=sec.content_type,
             )
 
-        # ── 2.5 Commentaries (chỉ published) ────────────────────
+        # ── 2.4 Commentaries (chỉ published) ────────────────────
         for comm in payload.commentaries:
             if not comm.is_published:
                 continue
@@ -310,9 +401,9 @@ class SyncService:
         """
         title = payload.work.title
         original = f" (tên khác: {payload.work.original_title})" if payload.work.original_title else ""
-        author = payload.author.name
-        pen_name = f" (bút danh: {payload.author.pen_name})" if payload.author.pen_name else ""
-
+        author_name = payload.author_ref.name
+        
+        # Format beautiful genre
         genre_display = self.genre_labels.get(payload.work.genre, payload.work.genre)
         if payload.work.sub_genre:
             sub = self.sub_genre_labels.get(payload.work.sub_genre, payload.work.sub_genre)
@@ -325,7 +416,7 @@ class SyncService:
         tag_names = ", ".join(t.name for t in payload.tags) if payload.tags else "Không có"
 
         parts = [
-            f"Tác phẩm {title}{original} do tác giả {author}{pen_name} sáng tác.",
+            f"Tác phẩm {title}{original} do tác giả {author_name} sáng tác.",
             f"Tác phẩm thuộc thể loại {genre_display} giai đoạn văn học {period}.",
             f"Tác phẩm được giảng dạy trong chương trình Ngữ Văn lớp {grade}, học kỳ {semester}.",
             f"Các chủ đề liên quan: {tag_names}.",

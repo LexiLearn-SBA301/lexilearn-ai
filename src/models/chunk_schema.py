@@ -21,19 +21,19 @@ class ChunkMetadata(BaseModel):
     author_id: Optional[str] = Field(None, description="UUID tác giả từ BE Postgres")
     section_id: Optional[str] = Field(None, description="UUID section từ BE Postgres")
 
-    work_title: str = Field(..., description="Tên tác phẩm (ví dụ: Tỏ Lòng)")
-    work_slug: str = Field(..., description="Slug của tên tác phẩm")
+    work_title: Optional[str] = Field(None, description="Tên tác phẩm (ví dụ: Tỏ Lòng)")
+    work_slug: Optional[str] = Field(None, description="Slug của tên tác phẩm")
     author_name: str = Field(..., description="Tên tác giả (ví dụ: Phạm Ngũ Lão)")
     author_slug: str = Field(..., description="Slug tên tác giả")
 
-    author_period: str = Field(..., description="Thời kỳ tác giả (dan_gian, trung_dai, hien_dai)")
-    work_period: str = Field(..., description="Thời kỳ tác phẩm (dan_gian, trung_dai, hien_dai)")
+    author_period: Optional[str] = Field(None, description="Thời kỳ tác giả (dan_gian, trung_dai, hien_dai)")
+    work_period: Optional[str] = Field(None, description="Thời kỳ tác phẩm (dan_gian, trung_dai, hien_dai)")
 
-    genre: str = Field(..., description="Thể loại văn học dạng snake_case (ví dụ: tho_ca, truyen_ngan, su_thi)")
+    genre: Optional[str] = Field(None, description="Thể loại văn học dạng snake_case (ví dụ: tho_ca, truyen_ngan, su_thi)")
     sub_genre: Optional[str] = Field(None, description="Tiểu thể loại dạng snake_case (ví dụ: that_ngon_tu_tuyet). Null nếu chưa xác định.")
 
-    grade: int = Field(..., description="Lớp học (ví dụ: 12)")
-    semester: int = Field(..., description="Học kì học tác phẩm này (ví dụ: 1)")
+    grade: Optional[int] = Field(None, description="Lớp học (ví dụ: 12)")
+    semester: Optional[int] = Field(None, description="Học kì học tác phẩm này (ví dụ: 1)")
     publish_year: Optional[int] = Field(None, description="Năm xuất bản")
 
     chunk_category: str = Field(..., description="Phân loại chunk (ví dụ: text_section, author_bio, etc.)")

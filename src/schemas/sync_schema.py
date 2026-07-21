@@ -3,6 +3,7 @@ from typing import List, Optional
 
 # ── Constants ────────────────────────────────────────────────────
 EXPECTED_SNAPSHOT_SCHEMA = "literature_work_snapshot.v1"
+EXPECTED_AUTHOR_SCHEMA = "literature_author_snapshot.v1"
 SOURCE_BE_SYNC = "be_sync"
 
 
@@ -40,6 +41,12 @@ class AuthorData(BaseModel):
     portrait_url: Optional[str] = None
 
 
+class AuthorRefData(BaseModel):
+    id: str
+    slug: str
+    name: str
+
+
 class SectionData(BaseModel):
     id: str
     number: int
@@ -74,15 +81,22 @@ class WorkSnapshot(BaseModel):
     schema_version: str
     synced_at: str
     work: WorkData
-    author: AuthorData
+    author_ref: AuthorRefData
     sections: List[SectionData] = []
     commentaries: List[CommentaryData] = []
     tags: List[TagData] = []
 
 
+class AuthorSnapshot(BaseModel):
+    schema_version: str
+    synced_at: str
+    author: AuthorData
+
+
 class SyncResponse(BaseModel):
     success: bool
-    work_slug: str
+    work_slug: Optional[str] = None
+    author_slug: Optional[str] = None
     chunks_upserted: int
     chunks_deactivated: int
     detail: Optional[str] = None
