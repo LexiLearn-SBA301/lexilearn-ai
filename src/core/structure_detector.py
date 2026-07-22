@@ -20,6 +20,7 @@ class DocumentSection:
     page_end: int
     content: List[str]
     parent_title: Optional[str]
+    work_title: Optional[str] = None
 
 
 class StructureDetector:
@@ -339,6 +340,7 @@ class StructureDetector:
 
         sections: List[DocumentSection] = []
         section_stack: List[DocumentSection] = []
+        active_work_title = "Sách Giáo Khoa"
 
         for element in elements:
             if not element.raw_text or not element.raw_text.strip():
@@ -353,6 +355,9 @@ class StructureDetector:
                 else:
                     level = self._classify_heading_level(text)
 
+                if level == 0:
+                    active_work_title = text
+
                 parent_title: Optional[str] = None
                 for section in reversed(section_stack):
                     if section.level < level:
@@ -365,7 +370,8 @@ class StructureDetector:
                     page_start=element.page,
                     page_end=element.page,
                     content=[],
-                    parent_title=parent_title
+                    parent_title=parent_title,
+                    work_title=active_work_title
                 )
 
                 while section_stack and section_stack[-1].level >= level:
@@ -382,7 +388,8 @@ class StructureDetector:
                         page_start=element.page,
                         page_end=element.page,
                         content=[],
-                        parent_title=None
+                        parent_title=None,
+                        work_title="Sách Giáo Khoa"
                     )
                     sections.append(default_section)
                     section_stack.append(default_section)

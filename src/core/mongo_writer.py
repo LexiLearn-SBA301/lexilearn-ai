@@ -89,9 +89,10 @@ class MongoWriter:
 
         # 2. Metadata & query filtering indexes
         metadata_fields = [
-            ("metadata.ten_tac_pham", 1),
-            ("metadata.tac_gia", 1),
-            ("metadata.lop", 1),
+            ("metadata.work_title", 1),
+            ("metadata.author_name", 1),
+            ("metadata.grade", 1),
+            ("metadata.work_slug", 1),
             ("source_doc_id", 1),
             ("is_active", 1)
         ]
@@ -212,6 +213,35 @@ class MongoWriter:
         return result.modified_count
 
     @retry_on_transient_error()
+    def deactivate_by_work_slug(self, work_slug: str) -> int:
+        """
+        Soft deletes all chunks of a work (from all sources) by setting is_active = False.
+        """
+        result = self.collection.update_many(
+            {"metadata.work_slug": work_slug, "is_active": True},
+            {"$set": {"is_active": False}}
+        )
+        logger.info(f"Deactivated {result.modified_count} chunks for work_slug '{work_slug}'.")
+        return result.modified_count
+
+    @retry_on_transient_error()
+    def deactivate_by_author_slug(self, author_slug: str) -> int:
+        """
+        Soft deletes only author_bio chunks by setting is_active = False.
+        Does NOT touch work chunks that reference the same author_slug.
+        """
+        result = self.collection.update_many(
+            {
+                "metadata.author_slug": author_slug,
+                "metadata.chunk_category": "author_bio",
+                "is_active": True,
+            },
+            {"$set": {"is_active": False}}
+        )
+        logger.info(f"Deactivated {result.modified_count} author_bio chunks for author_slug '{author_slug}'.")
+        return result.modified_count
+
+    @retry_on_transient_error()
     def document_exists(self, source_doc_id: str) -> bool:
         """
         Check if any active chunks exist for the given source_doc_id.
@@ -235,3 +265,12 @@ class MongoWriter:
         Returns the total count of chunks for a given source_doc_id.
         """
         return self.collection.count_documents({"source_doc_id": source_doc_id})
+
+    @retry_on_transient_error()
+    def count_active_by_work_slug(self, work_slug: str) -> int:
+        """
+        Returns the total count of active chunks for a given work_slug.
+        """
+        return self.collection.count_documents(
+            {"metadata.work_slug": work_slug, "is_active": True}
+        )

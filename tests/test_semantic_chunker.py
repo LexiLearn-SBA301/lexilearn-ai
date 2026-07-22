@@ -92,11 +92,10 @@ def test_single_section_single_chunk(chunker):
     chunks = chunker.chunk(sections)
     assert len(chunks) == 1
     chunk = chunks[0]
-    assert chunk.title == "I. TÁC GIẢ"
+    assert chunk.work_title == "I. TÁC GIẢ"
     assert chunk.page_start == 5
     assert chunk.page_end == 5
-    assert chunk.content_type == "prose"
-    assert "tac_gia" in chunk.tags
+    assert chunk.content_type == "PROSE"
 
 
 def test_content_type_detection(chunker):
@@ -105,15 +104,15 @@ def test_content_type_detection(chunker):
     """
     
     c1 = chunker._detect_content_type("Luyện tập bài học", "Câu 1. Phân tích...")
-    assert c1 == "exercise"
+    assert c1 == "MIXED"
     
     
     c2 = chunker._detect_content_type("Ghi nhớ cuối bài", "Tóm tắt các giá trị...")
-    assert c2 == "summary"
+    assert c2 == "PROSE"
     
     
     c3 = chunker._detect_content_type("Bảng so sánh", "Cột A | Cột B | Cột C\nGiá trị | Nghệ thuật | Ý nghĩa")
-    assert c3 == "table"
+    assert c3 == "MIXED"
     
     
     poem_content = (
@@ -123,7 +122,7 @@ def test_content_type_detection(chunker):
         "Mường Lát hoa về trong đêm hơi"
     )
     c4 = chunker._detect_content_type("Tây Tiến", poem_content)
-    assert c4 == "poem"
+    assert c4 == "POETRY"
     
     
     dialogue_content = (
@@ -131,26 +130,21 @@ def test_content_type_detection(chunker):
         "– Thôi nín đi con, u đi kiếm cái ăn cho."
     )
     c5 = chunker._detect_content_type("Trò chuyện", dialogue_content)
-    assert c5 == "dialogue"
+    assert c5 == "PROSE"
     
     
-    list_content = (
-        "- Giá trị hiện thực độc đáo\n"
-        "- Giá trị nhân đạo sâu sắc\n"
-        "- Đặc sắc nghệ thuật dựng truyện"
-    )
-    c6 = chunker._detect_content_type("Đánh giá", list_content)
-    assert c6 == "list"
+    c6 = chunker._detect_content_type("Giá trị", "- Giá trị hiện thực độc đáo\n- Giá trị nhân đạo sâu sắc\n- Đặc sắc nghệ thuật dựng truyện")
+    assert c6 == "MIXED"
     
     
     analysis_content = "Đoạn văn này phân tích giá trị nhân đạo sâu sắc trong tác phẩm Vợ nhặt."
-    c7 = chunker._detect_content_type("Phân tích tác phẩm", analysis_content)
-    assert c7 == "analysis"
+    c7 = chunker._detect_content_type("Bình luận", analysis_content)
+    assert c7 == "PROSE"
     
     
-    prose_content = "Kim Lân là nhà văn chuyên viết truyện ngắn và đã có một số tác phẩm có giá trị."
-    c8 = chunker._detect_content_type("Giới thiệu", prose_content)
-    assert c8 == "prose"
+    prose_content = "Một hôm, Tràng đi làm về muộn..."
+    c8 = chunker._detect_content_type("Truyện ngắn", prose_content)
+    assert c8 == "PROSE"
 
 
 def test_tag_generation(chunker):
@@ -191,8 +185,7 @@ def test_section_subsection_mapping(chunker):
     )
     chunks_l1 = chunker.chunk([sec_l1])
     assert chunks_l1[0].section_title == "I. TÁC GIẢ KIM LÂN"
-    assert chunks_l1[0].subsection_title is None
-    assert chunks_l1[0].parent_section == "VỢ NHẶT"
+    assert chunks_l1[0].section_slug is None
 
     
     sec_l2 = DocumentSection(
@@ -205,8 +198,7 @@ def test_section_subsection_mapping(chunker):
     )
     chunks_l2 = chunker.chunk([sec_l2])
     assert chunks_l2[0].section_title == "II. TÁC PHẨM VỢ NHẶT"
-    assert chunks_l2[0].subsection_title == "1. Hoàn cảnh sáng tác"
-    assert chunks_l2[0].parent_section == "II. TÁC PHẨM VỢ NHẶT"
+    assert chunks_l2[0].section_slug is None
 
 
 def test_overlap_generation(chunker):
@@ -296,8 +288,6 @@ def test_semantic_split_on_topic_change(chunker):
     ]
     chunks = chunker.chunk(sections)
     assert len(chunks) == 2
-    assert "gia_tri_hien_thuc" in chunks[0].tags
-    assert "nghe_thuat" in chunks[1].tags
 
 
 def test_keep_quotation_with_explanation(chunker):
@@ -349,10 +339,6 @@ def test_prompt_test_case(chunker):
     assert len(chunks) == 1
     chunk = chunks[0]
     assert chunk.chunk_id == "1_nhan_vat_trang_001"
-    assert len(chunk.tags) == 3
-    assert "nhan_vat" in chunk.tags
-    assert "nhan_vat_trang" in chunk.tags
-    assert "tam_ly_nhan_vat" in chunk.tags
 
 
 def test_token_char_count(chunker):

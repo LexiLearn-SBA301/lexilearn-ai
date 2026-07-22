@@ -15,33 +15,29 @@ def validator():
 
 def create_base_chunk(
     chunk_id="chunk_01",
-    title="1. Nhân vật Tràng",
+    work_title="Vợ nhặt",
     content="Tràng là một nhân vật ngụ cư nghèo khổ trong tác phẩm Vợ nhặt của nhà văn Kim Lân. Qua nhân vật này, tác giả đã thể hiện tinh thần nhân đạo sâu sắc và khát vọng sống mãnh liệt của con người Việt Nam trước Cách mạng tháng Tám.",
-    content_type="prose",
+    content_type="PROSE",
     page_start=5,
     page_end=5,
     section_title="III. Phân tích",
-    subsection_title=None,
-    parent_section=None,
-    tags=None,
+    chunk_category="text_section",
+    section_slug="iii_phan_tich",
     token_count=320,
     char_count=200,
     has_overlap=False,
     overlap_from_chunk=None
 ):
-    if tags is None:
-        tags = ["nhan_vat_trang", "tam_ly_nhan_vat"]
     return SemanticChunk(
         chunk_id=chunk_id,
-        title=title,
+        work_title=work_title,
         content=content,
         content_type=content_type,
         page_start=page_start,
         page_end=page_end,
         section_title=section_title,
-        subsection_title=subsection_title,
-        parent_section=parent_section,
-        tags=tags,
+        chunk_category=chunk_category,
+        section_slug=section_slug,
         token_count=token_count,
         char_count=char_count,
         has_overlap=has_overlap,
@@ -58,17 +54,17 @@ def test_valid_chunk(validator):
     validated = validator.validate_chunk(chunk, [chunk])
     
     assert validated.validation.passed is True
-    assert validated.validation.quality_score == 95.0
+    assert validated.validation.quality_score == 100.0
     assert len(validated.validation.errors) == 0
     assert len(validated.validation.warnings) == 0
 
 
 def test_perfect_valid_chunk(validator):
     """
-    Test standard valid chunk with subsection_title.
+    Test standard valid chunk with chunk_category="code_block".
     Expected: passed = True, quality_score = 100.0, no errors, no warnings.
     """
-    chunk = create_base_chunk(subsection_title="1.1 Ngoại hình nhân vật")
+    chunk = create_base_chunk(chunk_category="code_block")
     validated = validator.validate_chunk(chunk, [chunk])
     
     assert validated.validation.passed is True
@@ -113,7 +109,7 @@ def test_rule_2_3_token_limits(validator):
     assert validated_low.validation.passed is True  
     assert "Token count too low" in validated_low.validation.warnings
     
-    assert validated_low.validation.quality_score == 85.0
+    assert validated_low.validation.quality_score == 90.0
 
     
     chunk_high = create_base_chunk(token_count=1300)
@@ -121,7 +117,7 @@ def test_rule_2_3_token_limits(validator):
     assert validated_high.validation.passed is True  
     assert "Token count too high" in validated_high.validation.warnings
     
-    assert validated_high.validation.quality_score == 80.0
+    assert validated_high.validation.quality_score == 85.0
 
 
 def test_rule_4_duplicate_detection(validator):
@@ -200,15 +196,14 @@ def test_rule_6_invalid_page_range(validator):
     assert "Invalid page range: page_start > page_end" in validated.validation.errors
 
 
-def test_rule_7_8_9_missing_metadata(validator):
+def test_rule_7_8_missing_metadata(validator):
     """
     Test missing metadata checks.
     Rule 7: Missing title
     Rule 8: Missing section_title
-    Rule 9: Missing tags
     """
     
-    chunk_title = create_base_chunk(title="")
+    chunk_title = create_base_chunk(work_title="")
     val_title = validator.validate_chunk(chunk_title, [chunk_title])
     assert "Missing title" in val_title.validation.warnings
 
@@ -216,11 +211,6 @@ def test_rule_7_8_9_missing_metadata(validator):
     chunk_sect = create_base_chunk(section_title=" ")
     val_sect = validator.validate_chunk(chunk_sect, [chunk_sect])
     assert "Missing section title" in val_sect.validation.warnings
-
-    
-    chunk_tags = create_base_chunk(tags=[])
-    val_tags = validator.validate_chunk(chunk_tags, [chunk_tags])
-    assert "Missing tags" in val_tags.validation.warnings
 
 
 def test_rule_10_invalid_content_type(validator):
@@ -242,10 +232,10 @@ def test_scoring_fail_case_from_prompt(validator):
     Expected: passed = False, quality_score = 10, errors = ["Empty content"], warnings = ["Missing title", "Token count too low"]
     """
     chunk = create_base_chunk(
-        title="",
+        work_title="",
         content="",
         token_count=5,
-        tags=[] 
+        chunk_category="text" 
     )
     
     
@@ -256,12 +246,13 @@ def test_scoring_fail_case_from_prompt(validator):
     
     
     
+    
     chunk = create_base_chunk(
-        title="",
+        work_title="",
         content="",
         token_count=5,
         section_title="Valid Section",
-        tags=["some_tag"]
+        chunk_category="text"
     )
     validated = validator.validate_chunk(chunk, [chunk])
     

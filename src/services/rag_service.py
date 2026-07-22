@@ -155,7 +155,12 @@ class RAGService:
         # 1. Preprocess Filters
         db_filter: Dict[str, Any] = {"is_active": True}
         if filters:
-            metadata_keys = {"ten_tac_pham", "tac_gia", "lop", "the_loai", "hoc_ki", "nam_sang_tac", "tags"}
+            metadata_keys = {
+                "work_title", "work_slug", "author_name", "author_slug",
+                "author_period", "work_period", "genre", "sub_genre",
+                "grade", "semester", "publish_year", "chunk_category",
+                "section_slug", "section_title", "section_order", "content_type"
+            }
             for key, val in filters.items():
                 # Áp dụng regex không phân biệt chữ hoa/thường cho các giá trị chuỗi
                 if isinstance(val, str):
@@ -242,8 +247,8 @@ class RAGService:
                 context_parts = []
                 for idx, chunk in enumerate(chunks):
                     metadata = chunk.get("metadata", {})
-                    title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
-                    author = metadata.get("tac_gia", "Không rõ tác giả")
+                    title = metadata.get("work_title", "Không rõ tác phẩm")
+                    author = metadata.get("author_name", "Không rõ tác giả")
                     page = chunk.get("position", {}).get("page", "?")
                     content = chunk.get("content", "")
 
@@ -261,7 +266,7 @@ class RAGService:
                 )
             else:
                 system_prompt = SYSTEM_PROMPT
-                user_prompt = f"Ngữ cảnh:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
+                user_prompt = f"Thông tin tham khảo:\n---\n{context}\n---\n\nCâu hỏi: {query}\n\nTrả lời:"
 
         try:
             if model_name:
@@ -304,13 +309,13 @@ class RAGService:
         
         # 1. Tìm kiếm trong cache DB
         query_regex = {"$regex": f"^{re.escape(work_title.strip())}$", "$options": "i"}
-        cached = works_col.find_one({"ten_tac_pham": query_regex})
+        cached = works_col.find_one({"work_title": query_regex})
         
         if cached:
-            logger.info("Found cached suggestions for work: %s", cached.get("ten_tac_pham"))
+            logger.info("Found cached suggestions for work: %s", cached.get("work_title"))
             return {
-                "ten_tac_pham": cached.get("ten_tac_pham", ""),
-                "tac_gia": cached.get("tac_gia", "Không rõ"),
+                "work_title": cached.get("work_title", ""),
+                "author_name": cached.get("author_name", "Không rõ"),
                 "suggested_questions": cached.get("suggested_questions", [])
             }
             
@@ -319,7 +324,7 @@ class RAGService:
         
         chunks_col = self.db["chunks"]
         chunks = list(chunks_col.find(
-            {"metadata.ten_tac_pham": query_regex, "is_active": True},
+            {"metadata.work_title": query_regex, "is_active": True},
             {"content": 1, "metadata": 1}
         ).limit(5))
         
@@ -327,10 +332,10 @@ class RAGService:
             raise ValueError(f"Không tìm thấy tác phẩm '{work_title}' trong cơ sở dữ liệu.")
             
         metadata = chunks[0].get("metadata", {})
-        resolved_author = metadata.get("tac_gia", "Không rõ")
-        resolved_title = metadata.get("ten_tac_pham", work_title.upper())
-        grade = metadata.get("lop", 12)
-        semester = metadata.get("hoc_ki", 1)
+        resolved_author = metadata.get("author_name", "Không rõ")
+        resolved_title = metadata.get("work_title", work_title.upper())
+        grade = metadata.get("grade", 12)
+        semester = metadata.get("semester", 1)
         
         chunk_texts = [c.get("content", "") for c in chunks]
         sample_text = "\n\n".join(chunk_texts)[:2000]
@@ -366,13 +371,13 @@ class RAGService:
             raise ValueError("Gemini returned empty questions list.")
             
         works_col.update_one(
-            {"ten_tac_pham": resolved_title.upper()},
+            {"work_title": resolved_title.upper()},
             {
                 "$set": {
-                    "ten_tac_pham": resolved_title.upper(),
-                    "tac_gia": resolved_author,
-                    "lop": grade,
-                    "hoc_ki": semester,
+                    "work_title": resolved_title.upper(),
+                    "author_name": resolved_author,
+                    "grade": grade,
+                    "semester": semester,
                     "suggested_questions": questions,
                     "updated_at": datetime.now(timezone.utc)
                 }
@@ -382,8 +387,8 @@ class RAGService:
         logger.info("Successfully generated and cached suggested questions for: %s", resolved_title.upper())
         
         return {
-            "ten_tac_pham": resolved_title.upper(),
-            "tac_gia": resolved_author,
+            "work_title": resolved_title.upper(),
+            "author_name": resolved_author,
             "suggested_questions": questions
         }
 
@@ -406,14 +411,14 @@ class RAGService:
         print(f"Bắt đầu đánh giá RAG với {total_queries} câu hỏi...")
         for i, item in enumerate(data):
             query_str = item["query"]
-            expected_work = item.get("ten_tac_pham", "").strip().lower()
+            expected_work = item.get("work_title", "").strip().lower()
 
             # Retrieve top chunks
             retrieved_chunks = self.hybrid_search(query_str, limit=limit)
 
             rank = 0
             for idx, chunk in enumerate(retrieved_chunks):
-                retrieved_work = chunk.get("metadata", {}).get("ten_tac_pham", "").strip().lower()
+                retrieved_work = chunk.get("metadata", {}).get("work_title", "").strip().lower()
                 
                 # Normalize both titles for robust comparison
                 norm_retrieved = remove_vietnamese_accents(retrieved_work)

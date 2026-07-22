@@ -75,7 +75,7 @@ def factual_node(state: AgentState, rag_service: Optional[RAGService] = None) ->
 
         model_name = FINE_TUNED_OLLAMA_LLM_MODEL
         if need_retrieval:
-            works = sorted({c.metadata.get("ten_tac_pham") for c in chunks_used if c.metadata.get("ten_tac_pham")})
+            works = sorted({c.metadata.get("work_title") for c in chunks_used if c.metadata.get("work_title")})
             emitter.retrieval(
                 "factual",
                 f"Đã tra cứu {len(chunks_used)} đoạn trích" + (f" từ: {', '.join(works)}" if works else "."),

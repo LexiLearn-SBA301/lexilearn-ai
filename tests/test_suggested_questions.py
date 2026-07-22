@@ -45,8 +45,8 @@ def client(mock_rag):
 def test_get_suggestions_cached(client, mock_rag):
     # 1. Mock DB cache hit
     mock_rag.works_metadata.find_one.return_value = {
-        "ten_tac_pham": "SÓNG",
-        "tac_gia": "Xuân Quỳnh",
+        "work_title": "SÓNG",
+        "author_name": "Xuân Quỳnh",
         "suggested_questions": [
             "Hoàn cảnh sáng tác bài thơ Sóng?",
             "Phân tích hình tượng sóng và em?",
@@ -60,8 +60,8 @@ def test_get_suggestions_cached(client, mock_rag):
     # 3. Assertions
     assert response.status_code == 200
     data = response.json()
-    assert data["ten_tac_pham"] == "SÓNG"
-    assert data["tac_gia"] == "Xuân Quỳnh"
+    assert data["work_title"] == "SÓNG"
+    assert data["author_name"] == "Xuân Quỳnh"
     assert len(data["suggested_questions"]) == 3
     assert data["suggested_questions"][0].startswith("Hoàn cảnh")
     
@@ -79,10 +79,10 @@ def test_get_suggestions_lazy_cache(client, mock_rag):
         {
             "content": "Sóng bắt đầu từ gió, Gió bắt đầu từ đâu...",
             "metadata": {
-                "ten_tac_pham": "SÓNG",
-                "tac_gia": "Xuân Quỳnh",
-                "lop": 12,
-                "hoc_ki": 1
+                "work_title": "SÓNG",
+                "author_name": "Xuân Quỳnh",
+                "grade": 12,
+                "semester": 1
             }
         }
     ]
@@ -106,7 +106,7 @@ def test_get_suggestions_lazy_cache(client, mock_rag):
         # Assertions
         assert response.status_code == 200
         data = response.json()
-        assert data["ten_tac_pham"] == "SÓNG"
+        assert data["work_title"] == "SÓNG"
         assert len(data["suggested_questions"]) == 3
         assert data["suggested_questions"][0] == "Câu hỏi factual 1"
         

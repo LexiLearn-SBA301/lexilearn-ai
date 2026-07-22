@@ -16,9 +16,13 @@ from db.mongo_client import connect_to_mongo, close_mongo_connection
 from db.checkpointer import get_checkpointer, close_checkpointer
 from api.chat_router import router as chat_router
 from api.debate_router import router as debate_router
+from api.sync_router import router as sync_router
 from api.exception_handlers import register_exception_handlers
 from services.agent_service.workflow_service import WorkflowService
 from services.agent_service.chat_service import OllamaChatService
+from services.sync_service import SyncService
+from core.mongo_writer import MongoWriter
+from core.embedder import Embedder
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,6 +32,14 @@ async def lifespan(app: FastAPI):
     checkpointer = await get_checkpointer()
     app.state.workflow = WorkflowService(checkpointer=checkpointer)
     app.state.chat_svc = OllamaChatService()
+
+    # Khởi tạo SyncService 1 lần, tái sử dụng MongoWriter & Embedder singleton
+    import os
+    mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/rag_db")
+    sync_writer = MongoWriter(mongo_uri=mongodb_uri)
+    sync_embedder = Embedder()
+    app.state.sync_svc = SyncService(writer=sync_writer, embedder=sync_embedder)
+
     yield
     # Close connection when stopping
     close_mongo_connection()
@@ -52,6 +64,7 @@ app.add_middleware(
 # Đăng ký các router API (tầng route nằm trong src/api/)
 app.include_router(chat_router)
 app.include_router(debate_router)   # endpoint test Tool 2 (critics_debate) độc lập
+app.include_router(sync_router)
 
 # Đăng ký exception handlers tập trung (map domain exception -> HTTP), khác java không có container phải tự đăng ký
 register_exception_handlers(app)
@@ -186,9 +199,9 @@ if __name__ == "__main__":
         # Build filter dict
         filters = {}
         if args.lop:
-            filters["lop"] = args.lop
+            filters["grade"] = args.lop
         if args.work:
-            filters["ten_tac_pham"] = args.work
+            filters["work_title"] = args.work
             
         print("=" * 80)
         print(f"TRUY VẤN HỆ THỐNG RAG: {args.query}")
@@ -208,8 +221,8 @@ if __name__ == "__main__":
             print(f"\nTÀI LIỆU THAM KHẢO TRÍCH XUẤT ({len(result['sources'])} chunks):")
             for idx, src in enumerate(result["sources"]):
                 metadata = src.get("metadata", {})
-                title = metadata.get("ten_tac_pham", "Không rõ tác phẩm")
-                author = metadata.get("tac_gia", "Không rõ tác giả")
+                title = metadata.get("work_title", "Không rõ tác phẩm")
+                author = metadata.get("author_name", "Không rõ tác giả")
                 page = src.get("position", {}).get("page", "?")
                 score = src.get("rrf_score", 0.0)
                 print(f"\n[{idx + 1}] {title} - {author} (Trang {page}) | Điểm RRF: {score:.5f}")

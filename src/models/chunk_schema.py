@@ -15,19 +15,34 @@ class ChunkMetadata(BaseModel):
     """
     Thông tin siêu dữ liệu (metadata) của tác phẩm văn học.
     """
-    ten_tac_pham: str = Field(..., description="Tên tác phẩm (ví dụ: Vợ Nhặt)")
-    tac_gia: str = Field(..., description="Tên tác giả (ví dụ: Kim Lân)")
-    lop: Optional[int] = Field(None, description="Lớp học (ví dụ: 12)")
-    the_loai: str = Field(..., description="Thể loại văn học (ví dụ: truyen_ngan)")
-    hoc_ki: Optional[int] = Field(None, description="Học kì học tác phẩm này (ví dụ: 1)")
-    nam_sang_tac: Optional[int] = Field(None, description="Năm sáng tác tác phẩm (ví dụ: 1962)")
-    tags: List[str] = Field(default_factory=list, description="Các nhãn đặc tả nội dung")
-    is_biography: bool = Field(False, description="Đánh dấu chunk có nội dung giới thiệu tiểu sử tác giả/tiểu dẫn hay không")
-    
-    # Mở rộng cho cấu trúc văn bản chi tiết
-    chunk_category: Optional[str] = Field(None, description="Phân loại chunk (ví dụ: author_bio, text_section, analysis)")
+    schema_version: str = Field("literature_seed.v1", description="Phiên bản schema")
+    source: Optional[str] = Field(None, description="Nguồn dữ liệu: 'docx_ingest' hoặc 'be_sync'")
+    work_id: Optional[str] = Field(None, description="UUID tác phẩm từ BE Postgres")
+    author_id: Optional[str] = Field(None, description="UUID tác giả từ BE Postgres")
+    section_id: Optional[str] = Field(None, description="UUID section từ BE Postgres")
+
+    work_title: Optional[str] = Field(None, description="Tên tác phẩm (ví dụ: Tỏ Lòng)")
+    work_slug: Optional[str] = Field(None, description="Slug của tên tác phẩm")
+    author_name: str = Field(..., description="Tên tác giả (ví dụ: Phạm Ngũ Lão)")
+    author_slug: str = Field(..., description="Slug tên tác giả")
+
+    author_period: Optional[str] = Field(None, description="Thời kỳ tác giả (dan_gian, trung_dai, hien_dai)")
+    work_period: Optional[str] = Field(None, description="Thời kỳ tác phẩm (dan_gian, trung_dai, hien_dai)")
+
+    genre: Optional[str] = Field(None, description="Thể loại văn học dạng snake_case (ví dụ: tho_ca, truyen_ngan, su_thi)")
+    sub_genre: Optional[str] = Field(None, description="Tiểu thể loại dạng snake_case (ví dụ: that_ngon_tu_tuyet). Null nếu chưa xác định.")
+
+    grade: Optional[int] = Field(None, description="Lớp học (ví dụ: 12)")
+    semester: Optional[int] = Field(None, description="Học kì học tác phẩm này (ví dụ: 1)")
+    publish_year: Optional[int] = Field(None, description="Năm xuất bản")
+
+    chunk_category: str = Field(..., description="Phân loại chunk (ví dụ: text_section, author_bio, etc.)")
+
     section_slug: Optional[str] = Field(None, description="Slug của đoạn văn bản gốc")
     section_title: Optional[str] = Field(None, description="Tiêu đề đoạn văn bản gốc")
+    section_order: Optional[int] = Field(None, description="Thứ tự của đoạn")
+
+    content_type: str = Field(..., description="Kiểu nội dung trong metadata (PROSE, POETRY, MIXED)")
 
 
 class ChunkSchema(BaseModel):
@@ -64,29 +79,39 @@ class ChunkSchema(BaseModel):
         populate_by_name=True,
         json_schema_extra={
             "example": {
-                "chunk_id": "truyen-vo-nhat_p003_c02",
-                "source_doc_id": "truyen-vo-nhat_p003",
-                "content": "Tràng đi một mình giữa đường vắng...",
-                "content_type": "prose",
+                "chunk_id": "to-long_c01",
+                "source_doc_id": "to-long",
+                "content": "Múa giáo non sông trải mấy thu...",
+                "content_type": "POETRY",
                 "position": {
-                    "page": 12,
-                    "chunk_index": 2,
-                    "total_chunks": 18
+                    "page": 1,
+                    "chunk_index": 0,
+                    "total_chunks": 5
                 },
                 "metadata": {
-                    "ten_tac_pham": "Vợ Nhặt",
-                    "tac_gia": "Kim Lân",
-                    "lop": 12,
-                    "the_loai": "truyen_ngan",
-                    "hoc_ki": 1,
-                    "nam_sang_tac": 1962,
-                    "tags": ["nhan_vat_trang", "tam_ly", "nan_doi"]
+                    "schema_version": "literature_seed.v1",
+                    "work_title": "Tỏ Lòng",
+                    "work_slug": "to-long",
+                    "author_name": "Phạm Ngũ Lão",
+                    "author_slug": "pham-ngu-lao",
+                    "author_period": "trung_dai",
+                    "work_period": "trung_dai",
+                    "genre": "tho_ca",
+                    "sub_genre": "that_ngon_tu_tuyet",
+                    "grade": 12,
+                    "semester": 1,
+                    "publish_year": None,
+                    "chunk_category": "text_section",
+                    "section_slug": "phien-am",
+                    "section_title": "Phiên âm",
+                    "section_order": 1,
+                    "content_type": "POETRY"
                 },
-                "token_count": 312,
-                "char_count": 687,
-                "has_overlap": True,
+                "token_count": 45,
+                "char_count": 120,
+                "has_overlap": False,
                 "embedding": [0.023, -0.145, 0.089],
-                "search_text": "Trang di mot minh giua duong vang",
+                "search_text": "Mua giao non song trai may thu ba quan khi manh nuot troi trau",
                 "model_version": "bge-m3-v1.0",
                 "is_active": True
             }
