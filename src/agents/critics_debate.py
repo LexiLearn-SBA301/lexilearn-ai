@@ -846,10 +846,4 @@ async def critics_debate(state, *, subgraph=None) -> dict:
         "events": emitter.milestones,
         "event_seq": emitter.seq,
     }
-    # Người học ĐÃ THẬT SỰ phát biểu -> cấm giám khảo bắt debate chạy lại: retry nghĩa là
-    # cả subgraph chạy lại, tức là hỏi lại người ta từ đầu những gì họ vừa gõ. Chỉ chặn khi
-    # họ có nói; bật nút rồi bỏ qua cả 2 vòng thì retry vẫn vô hại nên để nguyên.
-    if CriticRole.HUMAN in r1 or CriticRole.HUMAN in r2:
-        delta["retry_limits"] = {**(state.get("retry_limits") or {}), "critics_debate": 0}
-        logger.info("Người học đã tham gia -> khoá retry của critics_debate.")
     return delta
