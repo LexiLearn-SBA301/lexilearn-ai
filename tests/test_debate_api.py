@@ -44,7 +44,7 @@ def test_optin_sets_flag(client):
     r = client.post("/chat/debate/optin", json={"thread_id": THREAD})
     assert r.status_code == 200
     assert r.json()["optin"] is True
-    assert debate_session.take_optin(THREAD) is True
+    assert debate_session.has_optin(THREAD) is True
 
 
 def test_reply_without_session_returns_409(client):

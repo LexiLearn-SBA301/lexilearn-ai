@@ -270,11 +270,15 @@ def build_r2_prompt(
     # critic = người học lãnh cả chục phản biện còn tranh luận AI–AI biến mất — mà chính
     # phần đó mới là nguyên liệu cho bài luận.
     human_clause = (
-        f"- Trong bảng tin có luận điểm của NGƯỜI HỌC (id bắt đầu bằng 'human-'). Hãy dành "
-        f"ĐÚNG 1 phản biện (không nhiều hơn) nhắm vào một id 'human-...'; những phản biện "
+        f"- Trong bảng tin có luận điểm của NGƯỜI HỌC (id bắt đầu bằng 'human-'). BẮT BUỘC "
+        f"dành ÍT NHẤT 1 phản biện nhắm vào id 'human-...'; những phản biện "
         f"còn lại PHẢI nhắm vào nhà phê bình khác. Đối xử với người học đúng như một đồng "
         f"nghiệp trong hội đồng: đọc kỹ lý lẽ, đối chiếu VĂN BẢN GỐC, công nhận phần đứng "
         f"vững và chỉ thẳng phần chưa vững. KHÔNG khen lấy lệ, cũng KHÔNG hạ thấp.\n"
+        f"- Nếu luận điểm 'human-...' dựa vào chi tiết KHÔNG có trong VĂN BẢN GỐC, hãy nói "
+        f"THẲNG điều đó trong 'reason' (stance 'disagree' hoặc 'qualify') và chỉ ra văn bản "
+        f"thực sự cho thấy gì. Đó là phản biện hữu ích NHẤT cho người học — tuyệt đối KHÔNG "
+        f"được bỏ qua họ chỉ vì khó tìm cụm từ đối chiếu.\n"
     ) if has_human else ""
     return (
         f"{_question_block(question)}"
@@ -778,7 +782,9 @@ async def critics_debate(state, *, subgraph=None) -> dict:
     judge_feedback = (state.get("last_feedback") or {}).get(Stage.CRITICS_DEBATE.value, "")
     thread_id = state.get("thread_id") or ""
     # check có đăng ký phản biện trong thread này? và xóa để phục vụ chat sau
-    human_in_debate = debate_session.take_optin(thread_id) if thread_id else False
+    human_in_debate = debate_session.has_optin(thread_id) if thread_id else False
+    logger.info("critics_debate vào node: thread=%s human_in_debate=%s retry_feedback=%s",
+                thread_id or "(rỗng)", human_in_debate, bool(judge_feedback))
     if human_in_debate:
         # Debate bắt đầu -> khoá nút "Tranh luận cùng AI" trên FE (bấm thêm cũng vô nghĩa:
         # cờ vừa bị lấy đi rồi).

@@ -48,9 +48,9 @@ def finalize(state: AgentState) -> dict:
     """Gom kết quả nhánh -> messages + final_ai_response + final_output. Trả state delta."""
     route = state.get("route")
 
-    # Lưới vét cho cờ "tranh luận cùng AI": critics_debate.take_optin() lo ca thường, nhưng
-    # lượt đi nhánh factual (hoặc bị judge loại context) KHÔNG chạy qua debate -> cờ ở lại và
-    # sẽ kích hoạt nhầm ở LƯỢT CHAT SAU của cùng thread. Dọn ở đây vì mọi nhánh đều về finalize.
+    # Chỗ dọn cờ "tranh luận cùng AI" DUY NHẤT: critics_debate.has_optin() chỉ ĐỌC, để lượt
+    # retry của debate vẫn mời được người học. Không dọn thì cờ ở lại và kích hoạt nhầm ở LƯỢT
+    # CHAT SAU của cùng thread — kể cả lượt đi nhánh factual, vốn không chạy qua debate.
     thread_id = state.get("thread_id")
     if thread_id:
         debate_session.clear_optin(thread_id)
