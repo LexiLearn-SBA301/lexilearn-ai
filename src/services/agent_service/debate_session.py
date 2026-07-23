@@ -74,22 +74,18 @@ def mark_optin(thread_id: str) -> None:
     logger.info("Opt-in tranh luận cùng người học: thread=%s", thread_id)
 
 
-def take_optin(thread_id: str) -> bool:
-    """Đọc VÀ XOÁ cờ (one-shot). Gọi đúng 1 lần lúc vào node debate.
+def has_optin(thread_id: str) -> bool:
+    """Đọc cờ, KHÔNG xoá. Node debate gọi mỗi lần vào.
 
-    Xoá ngay để cờ không dính sang LƯỢT CHAT SAU của cùng thread (state persist theo
-    thread_id) -> người học sẽ bị hỏi ý kiến ở câu họ không hề bấm nút.
+    Không xoá vì judge có thể bắt debate chạy lại: nếu xoá ngay ở lần chạy đầu thì lượt
+    RETRY đọc phải cờ rỗng -> bỏ qua người học dù họ đã bấm nút.
     """
-    if thread_id in _optin:
-        _optin.discard(thread_id)
-        return True
-    return False
+    return thread_id in _optin
 
 
 def clear_optin(thread_id: str) -> None:
-    """Dọn cờ khi lượt chat kết thúc mà debate KHÔNG chạy tới (vd route=factual).
-
-    take_optin() lo ca thường; hàm này là lưới vét ở finalize cho ca cờ không ai đọc.
+    """Dọn cờ khi lượt chat kết thúc. has_optin() chỉ đọc nên đây là chỗ xoá DUY NHẤT:
+    finalize() gọi ở mọi nhánh, kể cả lượt factual không chạy qua debate.
     """
     _optin.discard(thread_id)
 

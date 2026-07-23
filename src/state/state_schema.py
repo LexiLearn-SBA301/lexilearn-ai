@@ -391,7 +391,7 @@ class GraphState(TypedDict, total=False):
 # Cấu hình mặc định gợi ý
 DEFAULT_RETRY_LIMITS: dict[str, int] = {
     "prepare_context": 0,
-    "critics_debate": 2,
+    "critics_debate": 1,
     "write_essay": 1,
 }
 

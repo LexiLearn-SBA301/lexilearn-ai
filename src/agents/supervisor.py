@@ -56,8 +56,12 @@ văn bản để phân tích chưa?", KHÔNG phải "yêu cầu này có cần t
 - need_retrieval=false CHỈ trong 2 ca:
   (a) Lời chào/tán gẫu/câu hỏi meta không liên quan văn học ("xin chào", "bạn là ai",
       "cảm ơn"): không có gì để tra cứu.
-  (b) Câu hỏi CHÉP NGUYÊN VĂN đoạn thơ/văn cần phân tích vào ngay trong câu hỏi và chỉ
-      muốn phân tích chính đoạn đó: tra cứu thêm chỉ gây nhiễu.
+  (b) Câu hỏi có CHÉP NGUYÊN VĂN đoạn thơ/văn vào ngay trong câu hỏi (thường đặt trong
+      ngoặc kép, hoặc xuống dòng nhiều câu thơ liên tiếp): đã có sẵn văn bản để phân tích,
+      tra cứu thêm chỉ gây nhiễu. Tiêu chí DUY NHẤT là "đoạn văn bản có nằm trong câu hỏi
+      không", KHÔNG xét người dùng hỏi về khía cạnh nào. VẪN là false khi họ chỉ hỏi MỘT
+      CHI TIẾT trong đoạn (một hình ảnh, một nhân vật, một câu thơ), hoặc yêu cầu so sánh
+      giữa các đối tượng ĐỀU đã xuất hiện trong đoạn đã chép.
 - MỌI trường hợp còn lại: need_retrieval=true. Gồm cả khi câu hỏi chỉ NHẮC TÊN tác phẩm
   mà không chép văn bản vào, và khi người dùng chê/đòi sửa câu trả lời trước ("kết bài
   ngắn quá, viết lại", "phân tích sâu hơn", "thêm dẫn chứng") — những câu này KHÔNG chứa
@@ -71,7 +75,10 @@ Và quyết định on_topic (câu hỏi có thuộc phạm vi hỗ trợ không
 HỎI LẠI KHI CHƯA RÕ TÁC PHẨM — chỉ áp dụng cho yêu cầu PHÂN TÍCH/CẢM NHẬN/NGHỊ LUẬN sâu
 (route="deep_analysis"). Yêu cầu chung chung như "phân tích nhân vật", "nêu cảm nhận",
 "phân tích nghệ thuật" mà KHÔNG gắn với một tác phẩm cụ thể thì KHÔNG được đoán bừa một
-tác phẩm rồi phân tích — sẽ ra bài sai. Đặt needs_clarification=true khi CẢ HAI đúng:
+tác phẩm rồi phân tích — sẽ ra bài sai. Đặt needs_clarification=true khi CẢ BA đúng:
+- Câu hỏi KHÔNG chép sẵn đoạn thơ/văn cần phân tích (tức need_retrieval=true): nếu văn bản
+  đã nằm ngay trong câu hỏi thì KHÔNG cần biết tên tác phẩm mới phân tích được — cứ phân
+  tích chính đoạn đó, TUYỆT ĐỐI không hỏi lại tên tác phẩm, VÀ
 - Câu hỏi hiện tại KHÔNG tự nêu tên tác phẩm, VÀ
 - Lịch sử hội thoại KHÔNG chốt được DUY NHẤT một tác phẩm: hoặc chưa nhắc tác phẩm nào,
   hoặc đã nhắc TỪ 2 TÁC PHẨM TRỞ LÊN mà không rõ đang muốn phân tích cái nào.
@@ -225,7 +232,9 @@ def supervisor(state: AgentState) -> dict:
         reasoning=d.reasoning,
         analyzed_at=datetime.now(timezone.utc),
     )
-    logger.info("Supervisor route=%s conf=%.2f on_topic=%s", route, d.confidence, d.on_topic)
+    logger.info("Supervisor route=%s conf=%.2f on_topic=%s need_retrieval=%s refine=%s clarify=%s",
+                route, d.confidence, d.on_topic, d.need_retrieval,
+                bool(refine_instruction), needs_clarification)
 
     emitter = EventEmitter(state, writer=safe_stream_writer())
     emitter.intent(

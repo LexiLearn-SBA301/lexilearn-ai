@@ -344,11 +344,14 @@ def test_round1_rejects_empty_message():
         debate_session.submit(THREAD, HumanReply(message="   "))
 
 
-def test_optin_is_one_shot():
-    """take_optin() phải XOÁ cờ -> không dính sang lượt chat sau của cùng thread."""
+def test_optin_song_qua_retry_chi_clear_moi_xoa():
+    """has_optin() KHÔNG xoá cờ -> lượt debate chạy lại (judge bắt retry) vẫn thấy. Chỗ
+    xoá là clear_optin() ở finalize -> cờ không dính sang lượt chat sau của cùng thread."""
     debate_session.mark_optin(THREAD)
-    assert debate_session.take_optin(THREAD) is True
-    assert debate_session.take_optin(THREAD) is False
+    assert debate_session.has_optin(THREAD) is True
+    assert debate_session.has_optin(THREAD) is True      # lần đọc thứ 2 = lượt retry
+    debate_session.clear_optin(THREAD)
+    assert debate_session.has_optin(THREAD) is False
 
 
 # =============================================================================
@@ -367,15 +370,26 @@ def _bulletin(with_human: bool):
 def test_r2_prompt_forces_targeting_human_when_present():
     """Clause phải có CẢ cận dưới lẫn cận trên.
 
-    Đo thật với qwen2.5:3b: chỉ ra lệnh "ít nhất 1" thì model dồn 3/3 phản biện vào người
-    học và bỏ hẳn 5 luận điểm của critic khác -> tranh luận AI–AI biến mất.
+    Bỏ hẳn clause (thử cho người học "bình đẳng", model tự chọn) đo được 1 rồi 0 phản biện
+    nhắm vào họ. Ngược lại chỉ ra lệnh "ít nhất 1" thì qwen2.5:3b dồn 3/3 phản biện vào
+    người học và bỏ hẳn luận điểm của critic khác -> tranh luận AI–AI biến mất.
     """
     p = build_r2_prompt(CriticRole.LICH_SU, "luận đề", _bulletin(True), [], "câu hỏi",
                         has_human=True)
     assert "human-" in p
-    assert "ĐÚNG 1 phản biện (không nhiều hơn)" in p
+    assert "ÍT NHẤT 1 và NHIỀU NHẤT 2" in p
     assert "còn lại PHẢI nhắm vào nhà phê bình khác" in p
     assert "NGƯỜI HỌC" in p
+
+
+def test_r2_prompt_cam_bo_qua_human_khi_kho_grounding():
+    """Người học nêu ý dựa vào đoạn KHÔNG có trong văn bản gốc -> critic thấy khó trích cụm
+    từ đối chiếu nên bỏ qua họ luôn (đo thật: 0 phản biện). Đúng lúc họ sai nhất thì lại
+    không ai sửa -> prompt phải ra lệnh nói thẳng thay vì im lặng."""
+    p = build_r2_prompt(CriticRole.LICH_SU, "luận đề", _bulletin(True), [], "câu hỏi",
+                        has_human=True)
+    assert "KHÔNG có trong VĂN BẢN GỐC" in p
+    assert "KHÔNG được bỏ qua họ" in p
 
 
 def test_r2_prompt_has_no_human_clause_when_absent():
